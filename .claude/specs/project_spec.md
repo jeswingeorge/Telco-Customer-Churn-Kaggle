@@ -3,9 +3,11 @@
 ## Context
 You need an end-to-end churn project to show interviewers: clean structure (Cookiecutter Data Science v2), careful data work, a comparison of several models judged on metrics that suit imbalanced data (Precision, Recall, ROC-AUC, not plain accuracy), and a deployed app (Streamlit → Docker → GCP Cloud Run). The finished repo should show *judgement*: no leakage, a reasoned choice of threshold, results you can explain, and a working public URL.
 
-**Status (2026-09-30):** Phase 1 (scaffolding) is done. The git repo is initialised (nothing committed yet), the CCDS folders and `churn/` stubs exist, the uv env runs Python 3.12 with all dependencies, and the raw CSV (7,043 rows × 21 cols) is in `data/raw/`. Next: Phase 2, data cleaning. `docker` and `gcloud` are **not** installed yet.
+**Status (2026-09-30):** Phase 1 (scaffolding) is done and committed. Phase 2 (data cleaning) is **in progress**: notebook `notebooks/1_data-explore.ipynb` has a univariate pass over all 21 columns, converts `TotalCharges` to numeric, fills its 11 blanks with 0, and writes `data/interim/telco_customer_churn_interim.xlsx` (`openpyxl` was added for this). `churn/dataset.py` is still a stub and `references/data_dictionary.md` is not written yet. `docker` and `gcloud` are **not** installed yet.
 
-**Decisions made:** uv + Python 3.12 · notebooks narrate, a reusable `churn` package does the work · extras: hyperparameter tuning (Optuna) + SHAP explainability.
+**Tutor skill:** `.claude/skills/churn-tutor/SKILL.md` (user-invoked only) runs Socratic tutoring + interview quizzes phase by phase.
+
+**Decisions made:** uv + Python 3.12 · notebooks narrate, a reusable `churn` package does the work · extras: hyperparameter tuning (Optuna) + SHAP explainability · cleaned data saved as Excel (`.xlsx`), not parquet.
 
 ---
 
@@ -22,7 +24,7 @@ Telco-Customer-Churn-Kaggle/
 ├── data/{raw,interim,processed,external}/   # raw CSV moves to data/raw/ (git-ignored)
 ├── models/                 # final churn_model.joblib + metadata.json (committed; small)
 ├── notebooks/
-│   ├── 1.0-jg-data-cleaning.ipynb
+│   ├── 1_data-explore.ipynb    # current name for the cleaning/univariate notebook (convention: 1.0-jg-data-cleaning)
 │   ├── 2.0-jg-eda.ipynb
 │   ├── 3.0-jg-baseline-models.ipynb
 │   ├── 4.0-jg-tuning-and-selection.ipynb
@@ -52,7 +54,12 @@ Known quirks to handle and *document in the notebook*:
 - `"No internet service"` / `"No phone service"` values in 7 service columns → keep as their own category (they carry information) and note the redundancy with `InternetService`/`PhoneService`.
 - Drop `customerID` (an identifier, no predictive value); target `Churn` Yes/No → 1/0.
 - Checks: duplicates, dtypes, value ranges, and class balance (~26.5% churn → imbalanced, which is why accuracy is not used).
-- Output: `data/interim/telco_clean.parquet`.
+- Output: `data/interim/telco_customer_churn_interim.xlsx` (Excel, decided 2026-09-30: easy to open and inspect by hand). `dataset.py` writes the same file via `openpyxl`. Excel doesn't store pandas dtypes, so whoever reads it back (`pd.read_excel`) should check the dtypes (e.g. `TotalCharges` float, categoricals as strings) rather than trust them.
+
+**Progress so far (notebook `1_data-explore.ipynb`):**
+- ✅ `TotalCharges` → numeric (`pd.to_numeric(errors="coerce")`) exposes 11 NaNs. Inspected them: all `tenure == 0`, none churned, none senior, all have dependents, 10/11 on two-year contracts → new customers not yet billed → filled with 0.
+- ✅ Univariate look at every column. Notes recorded: `customerID` is unique per row (7,043); gender ≈ 50/50; ~16% senior; ~52% have a partner; ~30% have dependents; `tenure` is U-shaped with a pile-up at the 72-month cap; `TotalCharges` is right-skewed (≈ tenure × MonthlyCharges); churn is 73/27.
+- ⬜ Still to do: harmonise `SeniorCitizen` to Yes/No, drop `customerID`, map `Churn` → 1/0, check duplicates and value ranges, move the logic into `churn/dataset.py` (reading paths from `churn.config`, not `../data/...`), write `references/data_dictionary.md`.
 
 ## 3. EDA (notebook 2.0, figures saved to `reports/figures/`)
 - Target balance; churn rate by each categorical column (contract, payment method, internet type, tech support…).
@@ -102,7 +109,7 @@ Prerequisites: install Docker Desktop + Google Cloud SDK; have a GCP project wit
 
 ## 10. Implementation order
 1. ✅ Scaffold CCDS, `git init`, uv env on 3.12, move raw CSV. (Data dictionary moves to Phase 2.)
-2. `dataset.py` + notebook 1.0 → 3. EDA notebook 2.0 → 4. `features.py`
+2. 🟡 `dataset.py` + notebook 1.0 (univariate pass + TotalCharges fix done in the notebook; `dataset.py` + data dictionary pending) → 3. EDA notebook 2.0 → 4. `features.py`
 5. Baselines (3.0) → 6. Optuna + threshold + final model (4.0, `train.py`) → 7. SHAP (5.0)
 8. Streamlit app → 9. Docker → 10. Cloud Run → 11. README + tests polish.
 

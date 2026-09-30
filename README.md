@@ -16,6 +16,21 @@ Each row represents a customer, each column contains customer’s attributes des
 - Customer account information – how long they’ve been a customer, contract, payment method, paperless billing, monthly charges, and total charges
 - Demographic info about customers – gender, age range, and if they have partners and dependents
 
+## Progress
+| Phase | Status |
+|---|---|
+| 1. Scaffolding (CCDS v2 layout, uv + Python 3.12, `churn` package) | ✅ Done |
+| 2. Data cleaning (`notebooks/1_data-explore.ipynb`, `churn/dataset.py`) | 🟡 In progress: univariate analysis done, `TotalCharges` fixed |
+| 3. EDA · 4. Feature engineering · 5. Modelling · 6. SHAP | ⬜ Not started |
+| 7. Streamlit app · 8. Docker · 9. Cloud Run | ⬜ Not started |
+
+## Data findings so far
+- **Imbalanced target:** 73% stayed, 27% churned, so accuracy is misleading and the project reports Precision, Recall, F1, ROC-AUC and PR-AUC.
+- **`TotalCharges` quirk:** stored as text; 11 rows are blank. All 11 have `tenure == 0` (new customers not yet billed, none churned), so the blanks are filled with **0** rather than a mean/median or dropped.
+- **`tenure`** is U-shaped: many brand-new customers and a spike at 72 months, which is the dataset's cap, not real behaviour.
+- **`TotalCharges`** is right-skewed and roughly equals `tenure × MonthlyCharges` (collinear; to handle in feature engineering).
+- **Demographics:** gender is ~50/50, ~16% are senior citizens, ~52% have a partner, ~30% have dependents.
+
 ## Results
 _To be filled in after model selection._
 
@@ -26,7 +41,7 @@ _To be filled in after deploying to Cloud Run._
 ```
 ├── data/{raw,interim,processed,external}   <- git-ignored; raw CSV goes in data/raw/
 ├── models/          <- trained pipeline + metadata
-├── notebooks/       <- N.0-jg-<topic>.ipynb
+├── notebooks/       <- 1_data-explore.ipynb (cleaning + univariate); later N.0-jg-<topic>.ipynb
 ├── references/      <- data dictionary and other reference material
 ├── reports/figures/ <- generated plots
 ├── churn/           <- source package (config, dataset, features, evaluate, plots, modeling/)
@@ -37,6 +52,8 @@ _To be filled in after deploying to Cloud Run._
 
 ## How to run
 ```bash
-uv sync
+uv sync                      # Python 3.12 env + editable install of the churn package
+uv run jupyter lab           # open notebooks/1_data-explore.ipynb
 ```
+The raw CSV is not committed: download it from Kaggle into `data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv`.
 _More commands to be added as the pipeline is built._
