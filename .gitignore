@@ -1,0 +1,22 @@
+# Data (raw data comes from Kaggle and is not committed)
+/data/
+archive.zip
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Editors / OS
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
