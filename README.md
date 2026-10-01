@@ -26,6 +26,7 @@ Each row represents a customer, each column contains customer’s attributes des
 
 ## Data findings so far
 - **Imbalanced target:** 73% stayed, 27% churned, so accuracy is misleading and the project reports Precision, Recall, F1, ROC-AUC and PR-AUC.
+- **Cleaned data format:** saved to `data/interim/telco_customer_churn_interim.parquet`, which keeps column dtypes (unlike CSV/Excel).
 - **`TotalCharges` quirk:** stored as text; 11 rows are blank. All 11 have `tenure == 0` (new customers not yet billed, none churned), so the blanks are filled with **0** rather than a mean/median or dropped.
 - **`tenure`** is U-shaped: many brand-new customers and a spike at 72 months, which is the dataset's cap, not real behaviour.
 - **`TotalCharges`** is right-skewed and roughly equals `tenure × MonthlyCharges` (collinear; to handle in feature engineering).

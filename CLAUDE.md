@@ -5,10 +5,10 @@ Telco customer churn prediction: a portfolio project for data science interviews
 ## Current state
 - CCDS folders are created, and the `churn/` package has empty module stubs; `churn/config.py` holds paths and constants. The package is installed in editable mode through the `uv_build` backend in `pyproject.toml`, so notebooks can `import churn`.
 - Raw data is at `data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv` (Kaggle `blastchar/telco-customer-churn`, 7,043 rows).
-- Phase 1 (scaffolding) is committed. `openpyxl` was added to runtime deps (the notebook writes an `.xlsx`).
-- Phase 2 (data cleaning) is **in progress** in `notebooks/1_data-explore.ipynb`: univariate analysis of all columns is done, and `TotalCharges` is converted to numeric with its 11 blanks filled with 0. Output goes to `data/interim/telco_customer_churn_interim.xlsx`.
+- Phase 1 (scaffolding) is committed. `pyarrow` is in the runtime deps for parquet I/O (`openpyxl` is also installed but no longer needed).
+- Phase 2 (data cleaning) is **in progress** in `notebooks/1_data-explore.ipynb`: univariate analysis of all columns is done, and `TotalCharges` is converted to numeric with its 11 blanks filled with 0. Output goes to `data/interim/telco_customer_churn_interim.parquet`.
 - Still to do in Phase 2: harmonise `SeniorCitizen`, drop `customerID`, map `Churn` to 1/0, check duplicates, move the cleaning into `churn/dataset.py` (still a stub), and write `references/data_dictionary.md`.
-- Cleaned data is saved as **Excel** (`.xlsx`, user's decision), not parquet. Excel loses dtypes, so re-check them after `pd.read_excel`.
+- Cleaned data is saved as **parquet** (`.parquet`, user's decision; replaced an earlier Excel choice). It keeps dtypes, so `pd.read_parquet` needs no re-casting. Use `engine="pyarrow"`, `index=False`.
 - The notebook name `1_data-explore.ipynb` differs from the spec's convention (`1.0-jg-data-cleaning.ipynb`). Ask the user before renaming it.
 - `.claude/skills/churn-tutor/` is a user-invoked tutor/interviewer skill (Socratic hints + interview quizzes).
 - Update this section as phases are completed.
