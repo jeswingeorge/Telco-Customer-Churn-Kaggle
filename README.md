@@ -29,7 +29,7 @@ Each row represents a customer, each column contains customer’s attributes des
 - **Cleaned data format:** saved to `data/interim/telco_customer_churn_interim.parquet`, which keeps column dtypes (unlike CSV/Excel).
 - **`TotalCharges` quirk:** stored as text; 11 rows are blank. All 11 have `tenure == 0` (new customers not yet billed, none churned), so the blanks are filled with **0** rather than a mean/median or dropped.
 - **`tenure`** is U-shaped: many brand-new customers and a spike at 72 months, which is the dataset's cap, not real behaviour.
-- **`TotalCharges`** is right-skewed and roughly equals `tenure × MonthlyCharges` (collinear; to handle in feature engineering).
+- **`TotalCharges`** is right-skewed and roughly equals `tenure × MonthlyCharges` (collinear). Decision: `TotalCharges` is dropped from the model features; `tenure` and `MonthlyCharges` carry nearly all of its information (to be confirmed by CV with and without it).
 - **Demographics:** gender is ~50/50, ~16% are senior citizens, ~52% have a partner, ~30% have dependents.
 
 ## Results

@@ -9,6 +9,7 @@ Telco customer churn prediction: a portfolio project for data science interviews
 - Phase 2 (data cleaning) is **in progress** in `notebooks/1_data-explore.ipynb`: univariate analysis of all columns is done, and `TotalCharges` is converted to numeric with its 11 blanks filled with 0. Output goes to `data/interim/telco_customer_churn_interim.parquet`.
 - Still to do in Phase 2: harmonise `SeniorCitizen`, drop `customerID`, map `Churn` to 1/0, check duplicates, move the cleaning into `churn/dataset.py` (still a stub), and write `references/data_dictionary.md`.
 - Cleaned data is saved as **parquet** (`.parquet`, user's decision; replaced an earlier Excel choice). It keeps dtypes, so `pd.read_parquet` needs no re-casting. Use `engine="pyarrow"`, `index=False`.
+- Bivariate/multivariate EDA has started in `notebooks/2_bi_multivariate_analysis.ipynb` (the spec calls it `2.0-jg-eda.ipynb`). **Decision (2026-10-02):** drop `TotalCharges` from the model features and keep `tenure` + `MonthlyCharges` (it is about `tenure × MonthlyCharges`; removes collinearity). Validate with CV with/without it in the baseline phase. The planned `avg_monthly_charge` feature is removed from the spec (EDA showed it is almost identical to `MonthlyCharges`). Still open: drop it in `dataset.py` or leave it out of the feature lists in `churn/config.py`.
 - The notebook name `1_data-explore.ipynb` differs from the spec's convention (`1.0-jg-data-cleaning.ipynb`). Ask the user before renaming it.
 - `.claude/skills/churn-tutor/` is a user-invoked tutor/interviewer skill (Socratic hints + interview quizzes).
 - Update this section as phases are completed.
@@ -35,6 +36,6 @@ Telco customer churn prediction: a portfolio project for data science interviews
 - `RANDOM_STATE = 42` and paths live in `churn/config.py`; nothing is hard-coded elsewhere.
 - **No leakage:** all preprocessing (encoding, scaling, engineered features) sits inside an sklearn `Pipeline`, fitted only on training folds. Stratified 80/20 split; the test set is evaluated once, at the end.
 - **Metrics:** Precision, Recall, F1, ROC-AUC, PR-AUC and the confusion matrix. Accuracy is shown for reference only (about 26.5% of customers churn). The decision threshold comes from out-of-fold predictions on train and is saved in `metadata.json`.
-- Known data quirks: `TotalCharges` has 11 blank strings (all `tenure == 0`, so fill with 0); `SeniorCitizen` is 0/1 while other binary columns are Yes/No; drop `customerID`.
+- Known data quirks: `TotalCharges` has 11 blank strings (all `tenure == 0`, so fill with 0); `SeniorCitizen` is 0/1 while other binary columns are Yes/No; drop `customerID`; `TotalCharges` is excluded from the model features (redundant with `tenure` × `MonthlyCharges`).
 - `data/` is git-ignored; the final model artifact in `models/` **is** committed so the Docker build is self-contained.
 - The Streamlit app must use the same saved pipeline as training, with no separate feature logic.

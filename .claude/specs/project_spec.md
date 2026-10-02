@@ -7,7 +7,7 @@ You need an end-to-end churn project to show interviewers: clean structure (Cook
 
 **Tutor skill:** `.claude/skills/churn-tutor/SKILL.md` (user-invoked only) runs Socratic tutoring + interview quizzes phase by phase.
 
-**Decisions made:** uv + Python 3.12 · notebooks narrate, a reusable `churn` package does the work · extras: hyperparameter tuning (Optuna) + SHAP explainability · cleaned data saved as parquet (`.parquet`, via `pyarrow`; briefly Excel on 2026-09-30, switched back 2026-10-01 because parquet keeps dtypes).
+**Decisions made:** uv + Python 3.12 · notebooks narrate, a reusable `churn` package does the work · extras: hyperparameter tuning (Optuna) + SHAP explainability · cleaned data saved as parquet (`.parquet`, via `pyarrow`; briefly Excel on 2026-09-30, switched back 2026-10-01 because parquet keeps dtypes) · `TotalCharges` is excluded from the model features (decided 2026-10-02, see section 3).
 
 ---
 
@@ -65,10 +65,11 @@ Known quirks to handle and *document in the notebook*:
 - Target balance; churn rate by each categorical column (contract, payment method, internet type, tech support…).
 - Numeric distributions split by churn (tenure, MonthlyCharges, TotalCharges); tenure cohorts.
 - Correlation / Cramér's V; note that TotalCharges ≈ tenure × MonthlyCharges (collinear).
+- **Decision (2026-10-02): drop `TotalCharges` from the model features; keep `tenure` and `MonthlyCharges`.** Evidence from notebook `2_bi_multivariate_analysis.ipynb`: the MonthlyCharges vs TotalCharges scatter is a wedge bounded by about 72 × MonthlyCharges, and their correlation is 0.65 (spread comes from tenure). `TotalCharges / tenure` (for tenure > 0) tracks `MonthlyCharges` almost linearly, so the two kept columns carry nearly all of its information. This removes collinearity (unstable Logistic Regression coefficients, split importances in tree models). Caveat: the small gap between average and current monthly charge (price changes over a customer's life) is lost. The planned `avg_monthly_charge` feature (`TotalCharges / tenure`) is removed from the spec: the EDA showed it is almost identical to `MonthlyCharges`. To validate in notebook 3.0: compare CV PR-AUC / ROC-AUC with and without `TotalCharges`. Open question: whether the column is dropped in `dataset.py` or left out of the feature lists in `churn/config.py`; either way the Streamlit app must not ask for it.
 - End with 5–7 written **business insights** (e.g. month-to-month + fiber + electronic check = high risk). These are what interviewers remember.
 
 ## 4. Feature engineering (`churn/features.py`)
-- Engineered: `tenure_group` bins, `num_services` (count of add-on services), `avg_monthly_charge = TotalCharges / max(tenure,1)`, `has_family` (Partner or Dependents).
+- Engineered: `tenure_group` bins, `num_services` (count of add-on services), `has_family` (Partner or Dependents).
 - `build_preprocessor(model_type)` returns a `ColumnTransformer`: OneHotEncoder(handle_unknown="ignore") for categoricals; StandardScaler on numerics for LR only (trees don't need scaling).
 - **Every step is inside an sklearn `Pipeline`**, fitted only on training folds, so nothing leaks from the test data.
 
@@ -114,7 +115,7 @@ Prerequisites: install Docker Desktop + Google Cloud SDK; have a GCP project wit
 8. Streamlit app → 9. Docker → 10. Cloud Run → 11. README + tests polish.
 
 ## 11. Verification
-- `uv run pytest`: the cleaning output has no nulls and a numeric TotalCharges; the pipeline fits/predicts on a sample; `predict.py` returns probabilities in [0,1] and respects the threshold.
+- `uv run pytest`: the cleaning output has no nulls and a numeric TotalCharges (in the interim data; it is not a model feature); the pipeline fits/predicts on a sample; `predict.py` returns probabilities in [0,1] and respects the threshold.
 - `uv run python -m churn.dataset && uv run python -m churn.modeling.train` rebuilds the artifact from the raw CSV and gives the same metrics (fixed seed).
 - Notebooks run top to bottom (`jupyter nbconvert --execute`).
 - Sanity target: tuned models should reach test ROC-AUC ≈ 0.83–0.85 on this dataset; much higher suggests leakage.
