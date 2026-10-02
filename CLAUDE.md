@@ -7,7 +7,7 @@ Telco customer churn prediction: a portfolio project for data science interviews
 - Raw data is at `data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv` (Kaggle `blastchar/telco-customer-churn`, 7,043 rows).
 - Phase 1 (scaffolding) is committed. `pyarrow` is in the runtime deps for parquet I/O (`openpyxl` is also installed but no longer needed).
 - Phase 2 (data cleaning) is **in progress** in `notebooks/1_data-explore.ipynb`: univariate analysis of all columns is done, and `TotalCharges` is converted to numeric with its 11 blanks filled with 0. Output goes to `data/interim/telco_customer_churn_interim.parquet`.
-- Still to do in Phase 2: move the cleaning into `churn/dataset.py` (still a stub), including mapping `Churn` to 1/0 and treating `SeniorCitizen` as categorical. Columns are **not** dropped in the parquet; the pipeline selects features.
+- Still to do in Phase 2: move the cleaning into `churn/dataset.py` (still a stub), the user fills its TODOs (load, TotalCharges fix, `Churn` → 1/0, save). Already done in it: `SeniorCitizen` 0/1 → "No"/"Yes" (decision 2026-10-02). It writes `config.CLEAN_DATA_FILE` (`data/processed/telco_churn_clean.parquet`), the input for modelling. Columns are **not** dropped in the parquet; the pipeline selects features.
 - Cleaned data is saved as **parquet** (`.parquet`, user's decision; replaced an earlier Excel choice). It keeps dtypes, so `pd.read_parquet` needs no re-casting. Use `engine="pyarrow"`, `index=False`.
 - Phase 3 (EDA) is **done** in `notebooks/2_bi_multivariate_analysis.ipynb` (the spec calls it `2.0-jg-eda.ipynb`); the user is moving to modelling.
   - The notebook ends with the tenure log-odds conclusion (raw `tenure` ~linear in log-odds, R² 0.92, except a steep first-6-months kink; LR: raw + test a `tenure_group`/new-customer flag; `log1p` fits worse) and 7 business insights. The README has a short version.
@@ -26,6 +26,12 @@ Telco customer churn prediction: a portfolio project for data science interviews
 ## Working with the user
 - This is interview prep: the user must be able to explain every choice. When writing code or notebooks, state *why* (e.g. why PR-AUC, why fit inside a Pipeline) in markdown cells, in comments, or in your reply.
 - The user does the analysis (cleaning, EDA, modelling) themselves. Help, review and scaffold when asked; don't finish whole phases unprompted.
+- **The user's background:** they have always worked in Jupyter notebooks and have **never used** a package/CCDS folder structure (`.py` modules, imports between files, `python -m`, editable installs), **Docker** or **Streamlit** (or Cloud Run/gcloud). For these, give **detailed, step-by-step help**:
+  - Explain what each new file or folder is for and *why* it exists, before writing it. Compare it to the notebook way ("in a notebook you'd run cells top to bottom; here `main()` does that").
+  - Give the exact commands to run (`uv run ...`), say where to run them (the repo root), and what output to expect.
+  - Show how notebook code maps to module code (cells → functions, hard-coded `../data/...` paths → `churn.config`, `if __name__ == "__main__":`).
+  - Introduce one new concept at a time, then verify it works together (run it, check the output) before moving on.
+  - When something fails, explain the error message in plain terms, not just the fix.
 - Before editing a notebook from outside VS Code, make sure the user has it closed (or tell them to use *File → Revert File* afterwards). An open notebook saved from the editor overwrites cells added on disk; this already lost an inserted cell once.
 
 ## Stack & commands
@@ -46,6 +52,6 @@ Telco customer churn prediction: a portfolio project for data science interviews
 - `RANDOM_STATE = 42` and paths live in `churn/config.py`; nothing is hard-coded elsewhere.
 - **No leakage:** all preprocessing (encoding, scaling, engineered features) sits inside an sklearn `Pipeline`, fitted only on training folds. Stratified 80/20 split; the test set is evaluated once, at the end.
 - **Metrics:** Precision, Recall, F1, ROC-AUC, PR-AUC and the confusion matrix. Accuracy is shown for reference only (about 26.5% of customers churn). The decision threshold comes from out-of-fold predictions on train and is saved in `metadata.json`.
-- Known data quirks: `TotalCharges` has 11 blank strings (all `tenure == 0`, so fill with 0); `SeniorCitizen` is 0/1 while other binary columns are Yes/No; drop `customerID`; columns excluded from the model are listed with reasons in `config.DROP_COLS`; "No internet service" duplicates `InternetService == "No"` and is collapsed in the pipeline.
+- Known data quirks: `TotalCharges` has 11 blank strings (all `tenure == 0`, so fill with 0); `SeniorCitizen` is 0/1 in the raw data (mapped to Yes/No in `dataset.clean()`); drop `customerID`; columns excluded from the model are listed with reasons in `config.DROP_COLS`; "No internet service" duplicates `InternetService == "No"` and is collapsed in the pipeline.
 - `data/` is git-ignored; the final model artifact in `models/` **is** committed so the Docker build is self-contained.
 - The Streamlit app must use the same saved pipeline as training, with no separate feature logic.

@@ -50,7 +50,7 @@ Telco-Customer-Churn-Kaggle/
 ## 2. Data cleaning (`churn/dataset.py`, notebook 1.0, `references/data_dictionary.md`)
 Known quirks to handle and *document in the notebook*:
 - `TotalCharges` is text; 11 rows are `" "`. All have `tenure == 0` (new customers) → set to 0, not drop, with a reason written down.
-- `SeniorCitizen` is 0/1 while other binary columns are Yes/No → either convert to Yes/No in `dataset.py` or keep 0/1 and list it explicitly as categorical (never let `select_dtypes` treat it as numeric). User to choose.
+- `SeniorCitizen` is 0/1 while other binary columns are Yes/No → **Decision (2026-10-02):** converted to Yes/No in `dataset.clean()` so it is categorical like the others (never scaled as a number) and the app shows a Yes/No choice.
 - `"No phone service"` in `MultipleLines` → kept as its own level; it makes `PhoneService` redundant, so `PhoneService` is dropped.
 - **Decision (2026-10-02):** `"No internet service"` in the add-on columns (`config.NO_INTERNET_COLS`) is identical to `InternetService == "No"` → collapsed to `"No"` by `features.collapse_no_internet`, a stateless `FunctionTransformer` step inside the Pipeline (so the app applies it too). Avoids six identical one-hot dummies.
 - Drop `customerID` (an identifier, no predictive value); target `Churn` Yes/No → 1/0.
@@ -62,7 +62,7 @@ Known quirks to handle and *document in the notebook*:
 - ✅ Univariate look at every column. Notes recorded: `customerID` is unique per row (7,043); gender ≈ 50/50; ~16% senior; ~52% have a partner; ~30% have dependents; `tenure` is U-shaped with a pile-up at the 72-month cap; `TotalCharges` is right-skewed (≈ tenure × MonthlyCharges); churn is 73/27.
 - ✅ Duplicates checked: none; 22 rows are identical once `customerID` is removed (different customers, same profile) → kept.
 - ✅ `references/data_dictionary.md` written (all 21 columns: type, values, meaning, quirks, model use).
-- ⬜ Still to do: `churn/dataset.py` (reading paths from `churn.config`, not `../data/...`): TotalCharges fix, `Churn` → 1/0 (needed: sklearn metrics default to `pos_label=1`, XGBoost rejects string labels), the `SeniorCitizen` choice, write the parquet. **Columns are not dropped in the parquet**: `customerID` labels batch predictions and the drops must stay testable with CV; the pipeline selects features from `config`.
+- ⬜ Still to do: `churn/dataset.py` (reading paths from `churn.config`, not `../data/...`): TotalCharges fix, `Churn` → 1/0 (needed: sklearn metrics default to `pos_label=1`, XGBoost rejects string labels), write the parquet to `config.CLEAN_DATA_FILE` (`data/processed/telco_churn_clean.parquet`; *processed* = final modelling input, notebook 1's interim file stays as is). The `SeniorCitizen` mapping is already in `clean()`; the rest are TODOs for the user. **Columns are not dropped in the parquet**: `customerID` labels batch predictions and the drops must stay testable with CV; the pipeline selects features from `config`.
 
 ## 3. EDA (notebook 2.0, figures saved to `reports/figures/`)
 - Target balance; churn rate by each categorical column (contract, payment method, internet type, tech support…).

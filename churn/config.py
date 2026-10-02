@@ -15,6 +15,8 @@ REPORTS_DIR = PROJ_ROOT / "reports"
 FIGURES_DIR = REPORTS_DIR / "figures"
 
 RAW_DATA_FILE = RAW_DATA_DIR / "WA_Fn-UseC_-Telco-Customer-Churn.csv"
+# Final cleaned table written by churn.dataset; the input for modelling (all columns kept).
+CLEAN_DATA_FILE = PROCESSED_DATA_DIR / "telco_churn_clean.parquet"
 
 RANDOM_STATE = 42
 TARGET = "Churn"
