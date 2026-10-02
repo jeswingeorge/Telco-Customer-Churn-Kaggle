@@ -9,6 +9,7 @@ dependencies = [
     "pandas>=3.0.6",
     "pyarrow>=25.0.1",
     "scikit-learn>=1.9.1",
+    "scipy>=1.18.1",
     "seaborn>=0.13.2",
     "shap>=0.52.0",
     "streamlit>=1.64.0",
