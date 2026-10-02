@@ -35,3 +35,14 @@ DROP_COLS = {
 # Add-on service columns whose "No internet service" level is exactly InternetService == "No".
 # features.collapse_no_internet maps that level to "No" so the information lives only in InternetService.
 NO_INTERNET_COLS = ["OnlineSecurity", "OnlineBackup", "DeviceProtection", "TechSupport", "StreamingTV"]
+
+# ---- Engineered features (built by churn.features.add_features) ----
+# Tenure bands, the same as the EDA. Fixed edges (not quantiles), so the step learns nothing → no leakage.
+# Tenure is limited to 0-72 months (dataset range, spec decision 2026-10-02); the app enforces it.
+TENURE_BINS = [-1, 6, 12, 24, 48, 72]
+TENURE_LABELS = ["0-6", "7-12", "13-24", "25-48", "49-72"]
+
+# num_services counts "Yes" across these add-on columns.
+ADDON_COLS = NO_INTERNET_COLS
+
+ENGINEERED_FEATURES = ["tenure_group", "num_services", "has_family"]

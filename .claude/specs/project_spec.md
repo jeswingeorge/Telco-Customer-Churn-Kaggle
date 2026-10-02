@@ -77,6 +77,7 @@ Known quirks to handle and *document in the notebook*:
 ## 4. Feature engineering (`churn/features.py`)
 - Engineered: `tenure_group` bins, `num_services` (count of add-on services), `has_family` (Partner or Dependents).
 - EDA evidence (2026-10-02): `num_services` is strong (internet customers: 55% churn with 0 add-ons → 5% with all 5), but it is an exact sum of the add-on binaries, so LR gets either the count or the binaries, not both; trees can take both. `has_family` looks unhelpful (Partner and Dependents each lower churn within the other's groups), so validate with CV before adding. `tenure` churn falls steeply in the first year and then flattens, so check the log-odds shape to choose raw / bins / `log1p` for LR.
+- **Decision (2026-10-02): `tenure` is limited to 0–72 months**, the range of the dataset (72 is its maximum). `tenure_group` uses fixed edges `[-1, 6, 12, 24, 48, 72]` → `0-6 / 7-12 / 13-24 / 25-48 / 49-72` (0–6 → 7–12 is the biggest drop, 52.9% → 35.9%). A value above 72 would get NaN from `pd.cut`, so the app enforces the limit (section 7) instead of the bins being open-ended. Trade-off: the model is only valid for customers inside the training range.
 - `build_preprocessor(model_type)` returns a `ColumnTransformer`: OneHotEncoder(handle_unknown="ignore") for categoricals; StandardScaler on numerics for LR only (trees don't need scaling).
 - **Every step is inside an sklearn `Pipeline`**, fitted only on training folds, so nothing leaks from the test data.
 
@@ -97,7 +98,8 @@ Known quirks to handle and *document in the notebook*:
 ## 7. Streamlit app (`app/streamlit_app.py`)
 - Loads the artifact + metadata once (`@st.cache_resource`).
 - **Single customer:** sidebar form with all raw input fields → churn probability, a risk label based on the saved threshold, and a SHAP waterfall showing the top reasons.
-- **Batch:** upload a CSV → table of scores, downloadable CSV.
+- **`tenure` is limited to 0–72 months** (the dataset's range; decision 2026-10-02, see section 4): the form input has `min_value=0, max_value=72`.
+- **Batch:** upload a CSV → table of scores, downloadable CSV. Rows with `tenure` outside 0–72 are flagged and not scored.
 - **About tab:** metrics table and model card taken from `metadata.json`.
 - The feature engineering lives in the saved pipeline (or in `churn.features`, imported), so the app and training transform data the same way.
 
@@ -117,7 +119,7 @@ Prerequisites: install Docker Desktop + Google Cloud SDK; have a GCP project wit
 
 ## 10. Implementation order
 1. ✅ Scaffold CCDS, `git init`, uv env on 3.12, move raw CSV. (Data dictionary moves to Phase 2.)
-2. ✅ `dataset.py` + notebook 1.0 + data dictionary → 3. ✅ EDA notebook 2.0 (insights written; figures saved after modelling) → 4. 🟡 `features.py` (`collapse_no_internet` done; `build_preprocessor` pending)
+2. ✅ `dataset.py` + notebook 1.0 + data dictionary → 3. ✅ EDA notebook 2.0 (insights written; figures saved after modelling) → 4. 🟡 `features.py` (`collapse_no_internet` + `add_features` done, built and checked in `3_feature_engg.ipynb`; `build_preprocessor` pending)
 5. Baselines (3.0) → 6. Optuna + threshold + final model (4.0, `train.py`) → 7. SHAP (5.0)
 8. Streamlit app → 9. Docker → 10. Cloud Run → 11. README + tests polish.
 
