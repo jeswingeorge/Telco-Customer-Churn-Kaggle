@@ -20,8 +20,10 @@ Each row represents a customer, each column contains customer’s attributes des
 | Phase | Status |
 |---|---|
 | 1. Scaffolding (CCDS v2 layout, uv + Python 3.12, `churn` package) | ✅ Done |
-| 2. Data cleaning (`notebooks/1_data-explore.ipynb`, `churn/dataset.py`) | 🟡 In progress: univariate analysis done, `TotalCharges` fixed |
-| 3. EDA · 4. Feature engineering · 5. Modelling · 6. SHAP | ⬜ Not started |
+| 2. Data cleaning (`notebooks/1_data-explore.ipynb`, `churn/dataset.py`) | 🟡 In progress: univariate analysis done, `TotalCharges` fixed, [data dictionary](references/data_dictionary.md) written; `dataset.py` pending |
+| 3. EDA (`notebooks/2_bi_multivariate_analysis.ipynb`) | ✅ Done: feature decisions and 7 business insights (figures saved after modelling) |
+| 4. Feature engineering (`churn/features.py`, `churn/config.py`) | 🟡 Started: drop list in `config.DROP_COLS`, `collapse_no_internet` transform |
+| 5. Modelling · 6. SHAP | ⬜ Not started |
 | 7. Streamlit app · 8. Docker · 9. Cloud Run | ⬜ Not started |
 
 ## Data findings so far
@@ -31,6 +33,37 @@ Each row represents a customer, each column contains customer’s attributes des
 - **`tenure`** is U-shaped: many brand-new customers and a spike at 72 months, which is the dataset's cap, not real behaviour.
 - **`TotalCharges`** is right-skewed and roughly equals `tenure × MonthlyCharges` (collinear). Decision: `TotalCharges` is dropped from the model features; `tenure` and `MonthlyCharges` carry nearly all of its information (to be confirmed by CV with and without it).
 - **Demographics:** gender is ~50/50, ~16% are senior citizens, ~52% have a partner, ~30% have dependents.
+
+## EDA findings
+Churn rate by group, against the 26.5% baseline. Associations, not proof of cause. Feature strength measured with Cramér's V (symmetric effect size) and Theil's U (how much knowing the feature reduces uncertainty about churn); p-values only used as a gate, since with 7,043 rows almost everything is "significant".
+
+| Driver | Highest-risk group | Lowest-risk group |
+|---|---|---|
+| Contract (strongest, U = 0.17) | Month-to-month 42.7% | Two-year 2.8% |
+| Tenure | First 6 months 52.9% | 4+ years 9.5% |
+| Payment method | Electronic check 45.3% | Automatic methods 15–17% |
+| Internet service | Fibre optic 41.9% | No internet 7.4% |
+| Add-on services (internet customers) | 0 add-ons 54.9% | All 5 add-ons 5.3% |
+| Online security / tech support | Without 42% | With 15% |
+| Senior citizen | Senior 41.7% | Non-senior 23.6% |
+| Paperless billing | Yes 33.6% | No 16.3% (holds within every payment method) |
+| Partner / Dependents | No partner 33.0%, no dependents 31.3% | With partner 19.7%, with dependents 15.5% |
+
+**Business insights** (full write-up at the end of the EDA notebook):
+1. **Contract** is the biggest driver: month-to-month customers churn 15× more than two-year customers. Moving them to a one-year contract is the main lever.
+2. **The first six months** are the danger zone (52.9% churn); 55% of churners leave in their first year, so onboarding matters most.
+3. **Fibre** customers churn at 41.9% vs 19.0% for DSL, at every tenure: a price-for-value or service-quality question.
+4. **Electronic-check** payers churn at 45.3%, even within month-to-month contracts; nudging them to autopay is cheap.
+5. **Each add-on service** lowers churn: 55% with none, 5% with all five; security and tech support matter most.
+6. **One segment** (month-to-month + fibre + electronic check) is 18.6% of customers but **42% of all churners** (60.4% churn rate): the first target list.
+7. **Seniors and single customers** churn more, largely because of their contract and payment choices.
+
+**Feature decisions** (reasons kept in `churn/config.py → DROP_COLS`; each to be confirmed with cross-validation in the baseline phase):
+- Dropped `TotalCharges`: ≈ `tenure × MonthlyCharges`, so it is collinear with them.
+- Dropped `gender`: no relationship with churn (Cramér's V = 0.000, p = 0.47).
+- Dropped `PhoneService`: fully contained in `MultipleLines` (its "No phone service" level).
+- Dropped `StreamingMovies`: adds no churn signal beyond `StreamingTV`. Their apparent overlap (V = 0.77) was inflated by the shared "No internet service" level; among internet customers it is 0.43.
+- **"No internet service"** in five add-on columns is identical to `InternetService == "No"`, which would create six identical one-hot columns. It is collapsed to "No" inside the model pipeline (`churn.features.collapse_no_internet`), so the app applies the same step.
 
 ## Results
 _To be filled in after model selection._
@@ -42,7 +75,7 @@ _To be filled in after deploying to Cloud Run._
 ```
 ├── data/{raw,interim,processed,external}   <- git-ignored; raw CSV goes in data/raw/
 ├── models/          <- trained pipeline + metadata
-├── notebooks/       <- 1_data-explore.ipynb (cleaning + univariate); later N.0-jg-<topic>.ipynb
+├── notebooks/       <- 1_data-explore.ipynb (cleaning + univariate), 2_bi_multivariate_analysis.ipynb (EDA); later N.0-jg-<topic>.ipynb
 ├── references/      <- data dictionary and other reference material
 ├── reports/figures/ <- generated plots
 ├── churn/           <- source package (config, dataset, features, evaluate, plots, modeling/)

@@ -67,3 +67,50 @@ Feature vs target:
 | gender | 0.000 | 0.000 | 0.000 |
 
 ⚠️ Don't compare U values with V values directly; they're on different scales. Contract's U = 0.17 is not "weaker" than its V = 0.41. Compare U only with other U values.
+
+---
+
+## Imbalanced target (26.5% churn)
+
+### Q3. If you train Logistic Regression with and without `class_weight="balanced"`, would you expect ROC-AUC to change much? Which metrics would change, and why?
+
+**My answer**
+
+I didn't answer this one; I asked for the model answer.
+
+**Tip to improve**
+
+- Separate the two things a classifier gives you: a **ranking** of customers (who is riskier than whom) and a **decision** (who gets flagged at a threshold).
+- ROC-AUC and PR-AUC judge the ranking only. Precision, recall, F1, accuracy and the confusion matrix judge the decision at a threshold.
+- Class weights mostly move the probabilities, not the order, so ask yourself which metrics depend on the order and which depend on the cut-off.
+- Key phrase: **"At this ratio, imbalance is mainly an evaluation and threshold problem, not a data problem."**
+
+**Model answer**
+
+> ROC-AUC should barely change. It only measures **ranking**: the probability that a random churner gets a higher score than a random non-churner. For logistic regression, `class_weight="balanced"` mostly shifts the **intercept** upward (the coefficients change only a little, through regularisation). Adding a constant inside the sigmoid raises every score but keeps their order, so ROC-AUC and PR-AUC stay almost the same.
+>
+> What *does* change is everything that depends on a **threshold**. At the default 0.5, the weighted model flags many more customers: **recall goes up, precision goes down**, F1 shifts, and accuracy drops. The **predicted probabilities** also get inflated: the average predicted churn probability rises well above the true 26.5% rate, so the model is no longer calibrated.
+>
+> So for LR, class weighting and threshold tuning do nearly the same job. Since I pick the threshold from out-of-fold predictions anyway, weighting adds little. Its main side effect is that I can't read the output as a true probability unless I recalibrate. Tree models are different: class weights change the split criterion, so the trees themselves change and AUC can move more. That's why I compare with and without weights instead of assuming they help.
+
+**Supporting numbers (from my data)**
+
+Logistic Regression, 5-fold stratified out-of-fold predictions (one-hot + scaled, `TotalCharges` dropped):
+
+| `class_weight` | ROC-AUC | PR-AUC | Mean predicted p | Accuracy @0.5 | Precision @0.5 | Recall @0.5 | F1 @0.5 |
+|---|---|---|---|---|---|---|---|
+| None | 0.843 | 0.651 | 0.266 | 0.802 | 0.652 | 0.541 | 0.592 |
+| balanced | 0.843 | 0.650 | **0.415** | 0.750 | 0.518 | **0.794** | 0.627 |
+
+- The ranking metrics are identical, so weighting didn't make the model better at telling churners apart.
+- At 0.5, recall jumps from 0.54 to 0.79 and precision falls from 0.65 to 0.52. That is the same trade-off you'd get by lowering the threshold on the unweighted model.
+- The mean predicted probability goes from 0.266 (matches the true rate, so calibrated) to 0.415 (inflated). This matters for the Streamlit app, which shows a churn probability.
+
+**Related points (imbalance plan for this project)**
+
+- **EDA:** only be aware of the imbalance. Compare each group's churn rate against the 26.5% baseline; don't resample anything.
+- **Split / CV:** `stratify=y` and `StratifiedKFold`, so every fold keeps about 26.5% churn.
+- **Metrics:** not accuracy (the "always No" `DummyClassifier` scores 73.5%). Use PR-AUC, whose random baseline is 0.265, not 0.5.
+- **Models:** `class_weight="balanced"` (LR, DT) and `scale_pos_weight ≈ 2.77` (XGB), compared with and without.
+- **Threshold:** chosen from out-of-fold predictions on train (max F2, or recall ≥ 0.75 with the best precision), because missing a churner costs more than an unneeded retention offer.
+- **Test set:** never resampled or re-weighted. If SMOTE were ever used, it would go inside an `imblearn` Pipeline so it runs on training folds only.

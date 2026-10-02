@@ -3,9 +3,9 @@
 ## Context
 You need an end-to-end churn project to show interviewers: clean structure (Cookiecutter Data Science v2), careful data work, a comparison of several models judged on metrics that suit imbalanced data (Precision, Recall, ROC-AUC, not plain accuracy), and a deployed app (Streamlit → Docker → GCP Cloud Run). The finished repo should show *judgement*: no leakage, a reasoned choice of threshold, results you can explain, and a working public URL.
 
-**Status (2026-09-30):** Phase 1 (scaffolding) is done and committed. Phase 2 (data cleaning) is **in progress**: notebook `notebooks/1_data-explore.ipynb` has a univariate pass over all 21 columns, converts `TotalCharges` to numeric, fills its 11 blanks with 0, and writes `data/interim/telco_customer_churn_interim.parquet` (via `pyarrow`). `churn/dataset.py` is still a stub and `references/data_dictionary.md` is not written yet. `docker` and `gcloud` are **not** installed yet.
+**Status (2026-10-02):** Phases 1 (scaffolding) and 3 (EDA) are done; Phase 2 (cleaning) only lacks `churn/dataset.py`. Notebook `1_data-explore.ipynb` does the univariate pass and the `TotalCharges` fix and writes `data/interim/telco_customer_churn_interim.parquet`; notebook `2_bi_multivariate_analysis.ipynb` holds the EDA, the tenure log-odds conclusion and 7 business insights; `references/data_dictionary.md` is written; feature drops are in `config.DROP_COLS`. **Next:** `dataset.py` → `features.py` (`build_preprocessor`) → baselines (notebook 3.0). Figures go to `reports/figures/` after modelling (user's decision). `docker` and `gcloud` are **not** installed yet.
 
-**Tutor skill:** `.claude/skills/churn-tutor/SKILL.md` (user-invoked only) runs Socratic tutoring + interview quizzes phase by phase.
+**Tutor skill:** `.claude/skills/churn-tutor/SKILL.md` (user-invoked only) runs Socratic tutoring phase by phase (no interview quizzes unless asked).
 
 **Decisions made:** uv + Python 3.12 · notebooks narrate, a reusable `churn` package does the work · extras: hyperparameter tuning (Optuna) + SHAP explainability · cleaned data saved as parquet (`.parquet`, via `pyarrow`; briefly Excel on 2026-09-30, switched back 2026-10-01 because parquet keeps dtypes) · `TotalCharges` is excluded from the model features (decided 2026-10-02, see section 3).
 
@@ -50,8 +50,9 @@ Telco-Customer-Churn-Kaggle/
 ## 2. Data cleaning (`churn/dataset.py`, notebook 1.0, `references/data_dictionary.md`)
 Known quirks to handle and *document in the notebook*:
 - `TotalCharges` is text; 11 rows are `" "`. All have `tenure == 0` (new customers) → set to 0, not drop, with a reason written down.
-- `SeniorCitizen` is 0/1 while other binary columns are Yes/No → make them consistent.
-- `"No internet service"` / `"No phone service"` values in 7 service columns → keep as their own category (they carry information) and note the redundancy with `InternetService`/`PhoneService`.
+- `SeniorCitizen` is 0/1 while other binary columns are Yes/No → either convert to Yes/No in `dataset.py` or keep 0/1 and list it explicitly as categorical (never let `select_dtypes` treat it as numeric). User to choose.
+- `"No phone service"` in `MultipleLines` → kept as its own level; it makes `PhoneService` redundant, so `PhoneService` is dropped.
+- **Decision (2026-10-02):** `"No internet service"` in the add-on columns (`config.NO_INTERNET_COLS`) is identical to `InternetService == "No"` → collapsed to `"No"` by `features.collapse_no_internet`, a stateless `FunctionTransformer` step inside the Pipeline (so the app applies it too). Avoids six identical one-hot dummies.
 - Drop `customerID` (an identifier, no predictive value); target `Churn` Yes/No → 1/0.
 - Checks: duplicates, dtypes, value ranges, and class balance (~26.5% churn → imbalanced, which is why accuracy is not used).
 - Output: `data/interim/telco_customer_churn_interim.parquet` (decided 2026-10-01). Parquet stores column dtypes (`TotalCharges` stays float, categoricals stay strings), is smaller and faster than Excel, and `pd.read_parquet` needs no re-casting. `dataset.py` writes the same file with `df.to_parquet(..., engine="pyarrow", index=False)`. Trade-off: it can't be opened by hand in Excel.
@@ -59,17 +60,23 @@ Known quirks to handle and *document in the notebook*:
 **Progress so far (notebook `1_data-explore.ipynb`):**
 - ✅ `TotalCharges` → numeric (`pd.to_numeric(errors="coerce")`) exposes 11 NaNs. Inspected them: all `tenure == 0`, none churned, none senior, all have dependents, 10/11 on two-year contracts → new customers not yet billed → filled with 0.
 - ✅ Univariate look at every column. Notes recorded: `customerID` is unique per row (7,043); gender ≈ 50/50; ~16% senior; ~52% have a partner; ~30% have dependents; `tenure` is U-shaped with a pile-up at the 72-month cap; `TotalCharges` is right-skewed (≈ tenure × MonthlyCharges); churn is 73/27.
-- ⬜ Still to do: harmonise `SeniorCitizen` to Yes/No, drop `customerID`, map `Churn` → 1/0, check duplicates and value ranges, move the logic into `churn/dataset.py` (reading paths from `churn.config`, not `../data/...`), write `references/data_dictionary.md`.
+- ✅ Duplicates checked: none; 22 rows are identical once `customerID` is removed (different customers, same profile) → kept.
+- ✅ `references/data_dictionary.md` written (all 21 columns: type, values, meaning, quirks, model use).
+- ⬜ Still to do: `churn/dataset.py` (reading paths from `churn.config`, not `../data/...`): TotalCharges fix, `Churn` → 1/0 (needed: sklearn metrics default to `pos_label=1`, XGBoost rejects string labels), the `SeniorCitizen` choice, write the parquet. **Columns are not dropped in the parquet**: `customerID` labels batch predictions and the drops must stay testable with CV; the pipeline selects features from `config`.
 
 ## 3. EDA (notebook 2.0, figures saved to `reports/figures/`)
 - Target balance; churn rate by each categorical column (contract, payment method, internet type, tech support…).
 - Numeric distributions split by churn (tenure, MonthlyCharges, TotalCharges); tenure cohorts.
 - Correlation / Cramér's V; note that TotalCharges ≈ tenure × MonthlyCharges (collinear).
-- **Decision (2026-10-02): drop `TotalCharges` from the model features; keep `tenure` and `MonthlyCharges`.** Evidence from notebook `2_bi_multivariate_analysis.ipynb`: the MonthlyCharges vs TotalCharges scatter is a wedge bounded by about 72 × MonthlyCharges, and their correlation is 0.65 (spread comes from tenure). `TotalCharges / tenure` (for tenure > 0) tracks `MonthlyCharges` almost linearly, so the two kept columns carry nearly all of its information. This removes collinearity (unstable Logistic Regression coefficients, split importances in tree models). Caveat: the small gap between average and current monthly charge (price changes over a customer's life) is lost. The planned `avg_monthly_charge` feature (`TotalCharges / tenure`) is removed from the spec: the EDA showed it is almost identical to `MonthlyCharges`. To validate in notebook 3.0: compare CV PR-AUC / ROC-AUC with and without `TotalCharges`. Open question: whether the column is dropped in `dataset.py` or left out of the feature lists in `churn/config.py`; either way the Streamlit app must not ask for it.
-- End with 5–7 written **business insights** (e.g. month-to-month + fiber + electronic check = high risk). These are what interviewers remember.
+- **Decision (2026-10-02): drop `TotalCharges` from the model features; keep `tenure` and `MonthlyCharges`.** Evidence from notebook `2_bi_multivariate_analysis.ipynb`: the MonthlyCharges vs TotalCharges scatter is a wedge bounded by about 72 × MonthlyCharges, and their correlation is 0.65 (spread comes from tenure). `TotalCharges / tenure` (for tenure > 0) tracks `MonthlyCharges` almost linearly, so the two kept columns carry nearly all of its information. This removes collinearity (unstable Logistic Regression coefficients, split importances in tree models). Caveat: the small gap between average and current monthly charge (price changes over a customer's life) is lost. The planned `avg_monthly_charge` feature (`TotalCharges / tenure`) is removed from the spec: the EDA showed it is almost identical to `MonthlyCharges`. To validate in notebook 3.0: compare CV PR-AUC / ROC-AUC with and without `TotalCharges`. Resolved: it stays in the cleaned data and is listed in `config.DROP_COLS`, so the pipeline never selects it and the app does not ask for it.
+- **Decisions (2026-10-02): also drop `gender`** (V = 0.000, p = 0.47), **`PhoneService`** (fully contained in `MultipleLines`), **`StreamingMovies`** (no churn signal beyond `StreamingTV` among internet customers; V 0.77 overall was inflated by the shared "No internet service" level, 0.43 among internet customers). All drops with reasons live in `config.DROP_COLS`; confirm with CV in notebook 3.0.
+- ✅ 7 written **business insights** at the end of the notebook (contract, first 6 months, fibre, electronic check, add-on count, the month-to-month + fibre + e-check segment = 18.6% of customers but 42% of churners, seniors/family). These are what interviewers remember.
+- ✅ Tenure log-odds check: close to linear (R² ≈ 0.92 over 12 bins) except a steep first-6-months kink; `log1p` fits worse (R² ≈ 0.86); the tenure effect lives in month-to-month customers. → LR: raw `tenure` + test a `tenure_group` / new-customer (≤ 6 months) flag with CV; trees: raw `tenure`.
+- ⏸ Figures saved to `reports/figures/` after modelling (user's decision).
 
 ## 4. Feature engineering (`churn/features.py`)
 - Engineered: `tenure_group` bins, `num_services` (count of add-on services), `has_family` (Partner or Dependents).
+- EDA evidence (2026-10-02): `num_services` is strong (internet customers: 55% churn with 0 add-ons → 5% with all 5), but it is an exact sum of the add-on binaries, so LR gets either the count or the binaries, not both; trees can take both. `has_family` looks unhelpful (Partner and Dependents each lower churn within the other's groups), so validate with CV before adding. `tenure` churn falls steeply in the first year and then flattens, so check the log-odds shape to choose raw / bins / `log1p` for LR.
 - `build_preprocessor(model_type)` returns a `ColumnTransformer`: OneHotEncoder(handle_unknown="ignore") for categoricals; StandardScaler on numerics for LR only (trees don't need scaling).
 - **Every step is inside an sklearn `Pipeline`**, fitted only on training folds, so nothing leaks from the test data.
 
@@ -110,7 +117,7 @@ Prerequisites: install Docker Desktop + Google Cloud SDK; have a GCP project wit
 
 ## 10. Implementation order
 1. ✅ Scaffold CCDS, `git init`, uv env on 3.12, move raw CSV. (Data dictionary moves to Phase 2.)
-2. 🟡 `dataset.py` + notebook 1.0 (univariate pass + TotalCharges fix done in the notebook; `dataset.py` + data dictionary pending) → 3. EDA notebook 2.0 → 4. `features.py`
+2. 🟡 `dataset.py` + notebook 1.0 (univariate pass + TotalCharges fix done in the notebook; data dictionary done; `dataset.py` pending) → 3. ✅ EDA notebook 2.0 (insights written; figures saved after modelling) → 4. 🟡 `features.py` (`collapse_no_internet` done; `build_preprocessor` pending)
 5. Baselines (3.0) → 6. Optuna + threshold + final model (4.0, `train.py`) → 7. SHAP (5.0)
 8. Streamlit app → 9. Docker → 10. Cloud Run → 11. README + tests polish.
 
