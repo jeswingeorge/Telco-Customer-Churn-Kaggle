@@ -20,7 +20,7 @@ Each row represents a customer, each column contains customer’s attributes des
 | Phase | Status |
 |---|---|
 | 1. Scaffolding (CCDS v2 layout, uv + Python 3.12, `churn` package) | ✅ Done |
-| 2. Data cleaning (`notebooks/1_data-explore.ipynb`, `churn/dataset.py`) | 🟡 In progress: univariate analysis done, `TotalCharges` fixed, [data dictionary](references/data_dictionary.md) written; `dataset.py` pending |
+| 2. Data cleaning (`notebooks/1_data-explore.ipynb`, `churn/dataset.py`) | ✅ Done: univariate analysis, cleaning script, [data dictionary](references/data_dictionary.md) |
 | 3. EDA (`notebooks/2_bi_multivariate_analysis.ipynb`) | ✅ Done: feature decisions and 7 business insights (figures saved after modelling) |
 | 4. Feature engineering (`churn/features.py`, `churn/config.py`) | 🟡 Started: drop list in `config.DROP_COLS`, `collapse_no_internet` transform |
 | 5. Modelling · 6. SHAP | ⬜ Not started |
@@ -28,7 +28,7 @@ Each row represents a customer, each column contains customer’s attributes des
 
 ## Data findings so far
 - **Imbalanced target:** 73% stayed, 27% churned, so accuracy is misleading and the project reports Precision, Recall, F1, ROC-AUC and PR-AUC.
-- **Cleaned data format:** saved to `data/interim/telco_customer_churn_interim.parquet`, which keeps column dtypes (unlike CSV/Excel).
+- **Cleaned data:** `uv run python -m churn.dataset` fixes `TotalCharges`, maps `Churn` to 1/0 and `SeniorCitizen` to Yes/No, and saves `data/processed/telco_churn_clean.parquet`. Parquet keeps column dtypes (unlike CSV/Excel). All columns are kept; the model pipeline chooses the features.
 - **`TotalCharges` quirk:** stored as text; 11 rows are blank. All 11 have `tenure == 0` (new customers not yet billed, none churned), so the blanks are filled with **0** rather than a mean/median or dropped.
 - **`tenure`** is U-shaped: many brand-new customers and a spike at 72 months, which is the dataset's cap, not real behaviour.
 - **`TotalCharges`** is right-skewed and roughly equals `tenure × MonthlyCharges` (collinear). Decision: `TotalCharges` is dropped from the model features; `tenure` and `MonthlyCharges` carry nearly all of its information (to be confirmed by CV with and without it).
@@ -87,7 +87,8 @@ _To be filled in after deploying to Cloud Run._
 ## How to run
 ```bash
 uv sync                      # Python 3.12 env + editable install of the churn package
-uv run jupyter lab           # open notebooks/1_data-explore.ipynb
+uv run python -m churn.dataset   # raw CSV -> data/processed/telco_churn_clean.parquet
+uv run jupyter lab           # open the notebooks
 ```
 The raw CSV is not committed: download it from Kaggle into `data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv`.
 _More commands to be added as the pipeline is built._

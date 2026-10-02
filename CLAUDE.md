@@ -6,8 +6,9 @@ Telco customer churn prediction: a portfolio project for data science interviews
 - CCDS folders are created, and the `churn/` package has empty module stubs; `churn/config.py` holds paths and constants. The package is installed in editable mode through the `uv_build` backend in `pyproject.toml`, so notebooks can `import churn`.
 - Raw data is at `data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv` (Kaggle `blastchar/telco-customer-churn`, 7,043 rows).
 - Phase 1 (scaffolding) is committed. `pyarrow` is in the runtime deps for parquet I/O (`openpyxl` is also installed but no longer needed).
-- Phase 2 (data cleaning) is **in progress** in `notebooks/1_data-explore.ipynb`: univariate analysis of all columns is done, and `TotalCharges` is converted to numeric with its 11 blanks filled with 0. Output goes to `data/interim/telco_customer_churn_interim.parquet`.
-- Still to do in Phase 2: move the cleaning into `churn/dataset.py` (still a stub), the user fills its TODOs (load, TotalCharges fix, `Churn` → 1/0, save). Already done in it: `SeniorCitizen` 0/1 → "No"/"Yes" (decision 2026-10-02). It writes `config.CLEAN_DATA_FILE` (`data/processed/telco_churn_clean.parquet`), the input for modelling. Columns are **not** dropped in the parquet; the pipeline selects features.
+- Phase 2 (data cleaning) is **done**. `notebooks/1_data-explore.ipynb` has the univariate analysis and writes `data/interim/telco_customer_churn_interim.parquet` (used by the EDA notebook).
+- `churn/dataset.py` is built (`uv run python -m churn.dataset`): `load_raw()` → `clean()` (TotalCharges → numeric + 11 blanks → 0, `Churn` → 1/0, `SeniorCitizen` → Yes/No) → `save()` to `config.CLEAN_DATA_FILE` (`data/processed/telco_churn_clean.parquet`, 7,043 × 21, no nulls), **the input for modelling**. Columns are **not** dropped in the parquet; the pipeline selects features. Small leftover: the comment on `load_raw()`'s `read_csv` line ("blank strings become NaN") is inaccurate; `to_numeric` does that.
+- pandas here is v3 with Copy-on-Write: `df[col].method(..., inplace=True)` silently does nothing. Always assign back (`df[col] = df[col].method(...)`).
 - Cleaned data is saved as **parquet** (`.parquet`, user's decision; replaced an earlier Excel choice). It keeps dtypes, so `pd.read_parquet` needs no re-casting. Use `engine="pyarrow"`, `index=False`.
 - Phase 3 (EDA) is **done** in `notebooks/2_bi_multivariate_analysis.ipynb` (the spec calls it `2.0-jg-eda.ipynb`); the user is moving to modelling.
   - The notebook ends with the tenure log-odds conclusion (raw `tenure` ~linear in log-odds, R² 0.92, except a steep first-6-months kink; LR: raw + test a `tenure_group`/new-customer flag; `log1p` fits worse) and 7 business insights. The README has a short version.
@@ -18,7 +19,7 @@ Telco customer churn prediction: a portfolio project for data science interviews
   - Model-excluded columns and their reasons live in `churn.config.DROP_COLS` (customerID, TotalCharges, gender, PhoneService, StreamingMovies); they stay in the cleaned data and the pipeline doesn't select them.
   - `churn.features.collapse_no_internet` (a Pipeline step) maps "No internet service" → "No" in `config.NO_INTERNET_COLS`. The EDA notebook applies the same replace to its own `df`, so the function isn't used there.
   - EDA findings feeding Phase 4: a count of add-on services is strong (churn 55% with 0 → 5% with 5 among internet customers) but is an exact sum of the 5 binaries, so for LR use one or the other; `has_family` would lose information; keep all 4 `PaymentMethod` levels.
-- **Next:** `churn/dataset.py` (Phase 2 leftover; notebook 3 loads data built by it) → `build_preprocessor` in `churn/features.py` → baselines (notebook 3.0).
+- **Next:** `build_preprocessor` in `churn/features.py` → baselines (notebook 3.0, loading `config.CLEAN_DATA_FILE`).
 - The notebook name `1_data-explore.ipynb` differs from the spec's convention (`1.0-jg-data-cleaning.ipynb`). Ask the user before renaming it.
 - `.claude/skills/churn-tutor/` is a user-invoked tutor skill (Socratic hints, business focus; no interview quizzes unless asked).
 - Update this section as phases are completed.

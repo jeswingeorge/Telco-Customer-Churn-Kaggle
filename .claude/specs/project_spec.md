@@ -3,7 +3,7 @@
 ## Context
 You need an end-to-end churn project to show interviewers: clean structure (Cookiecutter Data Science v2), careful data work, a comparison of several models judged on metrics that suit imbalanced data (Precision, Recall, ROC-AUC, not plain accuracy), and a deployed app (Streamlit → Docker → GCP Cloud Run). The finished repo should show *judgement*: no leakage, a reasoned choice of threshold, results you can explain, and a working public URL.
 
-**Status (2026-10-02):** Phases 1 (scaffolding) and 3 (EDA) are done; Phase 2 (cleaning) only lacks `churn/dataset.py`. Notebook `1_data-explore.ipynb` does the univariate pass and the `TotalCharges` fix and writes `data/interim/telco_customer_churn_interim.parquet`; notebook `2_bi_multivariate_analysis.ipynb` holds the EDA, the tenure log-odds conclusion and 7 business insights; `references/data_dictionary.md` is written; feature drops are in `config.DROP_COLS`. **Next:** `dataset.py` → `features.py` (`build_preprocessor`) → baselines (notebook 3.0). Figures go to `reports/figures/` after modelling (user's decision). `docker` and `gcloud` are **not** installed yet.
+**Status (2026-10-02):** Phases 1 (scaffolding), 2 (cleaning) and 3 (EDA) are done. `uv run python -m churn.dataset` builds `data/processed/telco_churn_clean.parquet` (`config.CLEAN_DATA_FILE`), the modelling input. Notebook `1_data-explore.ipynb` does the univariate pass and the `TotalCharges` fix and writes `data/interim/telco_customer_churn_interim.parquet`; notebook `2_bi_multivariate_analysis.ipynb` holds the EDA, the tenure log-odds conclusion and 7 business insights; `references/data_dictionary.md` is written; feature drops are in `config.DROP_COLS`. **Next:** `features.py` (`build_preprocessor`) → baselines (notebook 3.0). Figures go to `reports/figures/` after modelling (user's decision). `docker` and `gcloud` are **not** installed yet.
 
 **Tutor skill:** `.claude/skills/churn-tutor/SKILL.md` (user-invoked only) runs Socratic tutoring phase by phase (no interview quizzes unless asked).
 
@@ -34,7 +34,7 @@ Telco-Customer-Churn-Kaggle/
 ├── .claude/specs/project_spec.md   # this file
 ├── churn/                  # source package
 │   ├── config.py           # paths, RANDOM_STATE=42, TARGET, feature lists
-│   ├── dataset.py          # load raw → clean → data/interim/, data/processed/
+│   ├── dataset.py          # load raw → clean → data/processed/telco_churn_clean.parquet
 │   ├── features.py         # engineered features + ColumnTransformer builder
 │   ├── modeling/train.py   # CV, Optuna tuning, final fit, save artifact
 │   ├── modeling/predict.py # load artifact, predict_proba, apply threshold
@@ -55,14 +55,14 @@ Known quirks to handle and *document in the notebook*:
 - **Decision (2026-10-02):** `"No internet service"` in the add-on columns (`config.NO_INTERNET_COLS`) is identical to `InternetService == "No"` → collapsed to `"No"` by `features.collapse_no_internet`, a stateless `FunctionTransformer` step inside the Pipeline (so the app applies it too). Avoids six identical one-hot dummies.
 - Drop `customerID` (an identifier, no predictive value); target `Churn` Yes/No → 1/0.
 - Checks: duplicates, dtypes, value ranges, and class balance (~26.5% churn → imbalanced, which is why accuracy is not used).
-- Output: `data/interim/telco_customer_churn_interim.parquet` (decided 2026-10-01). Parquet stores column dtypes (`TotalCharges` stays float, categoricals stay strings), is smaller and faster than Excel, and `pd.read_parquet` needs no re-casting. `dataset.py` writes the same file with `df.to_parquet(..., engine="pyarrow", index=False)`. Trade-off: it can't be opened by hand in Excel.
+- Output: notebook 1 writes `data/interim/telco_customer_churn_interim.parquet` (decided 2026-10-01; used by the EDA notebook); `dataset.py` writes the modelling input `data/processed/telco_churn_clean.parquet`. Parquet stores column dtypes (`TotalCharges` stays float, categoricals stay strings), is smaller and faster than Excel, and `pd.read_parquet` needs no re-casting. Both use `df.to_parquet(..., engine="pyarrow", index=False)`. Trade-off: it can't be opened by hand in Excel.
 
 **Progress so far (notebook `1_data-explore.ipynb`):**
 - ✅ `TotalCharges` → numeric (`pd.to_numeric(errors="coerce")`) exposes 11 NaNs. Inspected them: all `tenure == 0`, none churned, none senior, all have dependents, 10/11 on two-year contracts → new customers not yet billed → filled with 0.
 - ✅ Univariate look at every column. Notes recorded: `customerID` is unique per row (7,043); gender ≈ 50/50; ~16% senior; ~52% have a partner; ~30% have dependents; `tenure` is U-shaped with a pile-up at the 72-month cap; `TotalCharges` is right-skewed (≈ tenure × MonthlyCharges); churn is 73/27.
 - ✅ Duplicates checked: none; 22 rows are identical once `customerID` is removed (different customers, same profile) → kept.
 - ✅ `references/data_dictionary.md` written (all 21 columns: type, values, meaning, quirks, model use).
-- ⬜ Still to do: `churn/dataset.py` (reading paths from `churn.config`, not `../data/...`): TotalCharges fix, `Churn` → 1/0 (needed: sklearn metrics default to `pos_label=1`, XGBoost rejects string labels), write the parquet to `config.CLEAN_DATA_FILE` (`data/processed/telco_churn_clean.parquet`; *processed* = final modelling input, notebook 1's interim file stays as is). The `SeniorCitizen` mapping is already in `clean()`; the rest are TODOs for the user. **Columns are not dropped in the parquet**: `customerID` labels batch predictions and the drops must stay testable with CV; the pipeline selects features from `config`.
+- ✅ `churn/dataset.py` (2026-10-02; written by the user from the skeleton): `load_raw()` → `clean()` → `save()`, paths from `churn.config`. `clean()`: TotalCharges → numeric, 11 blanks → 0; `Churn` → 1/0 (sklearn metrics default to `pos_label=1`, XGBoost rejects string labels); `SeniorCitizen` → Yes/No. Output: 7,043 rows × 21 columns, no nulls, at `config.CLEAN_DATA_FILE` (*processed* = final modelling input; notebook 1's interim file stays as is). Lesson recorded: with pandas Copy-on-Write, `df[col].fillna(..., inplace=True)` silently does nothing; assign back instead. **Columns are not dropped in the parquet**: `customerID` labels batch predictions and the drops must stay testable with CV; the pipeline selects features from `config`.
 
 ## 3. EDA (notebook 2.0, figures saved to `reports/figures/`)
 - Target balance; churn rate by each categorical column (contract, payment method, internet type, tech support…).
@@ -117,7 +117,7 @@ Prerequisites: install Docker Desktop + Google Cloud SDK; have a GCP project wit
 
 ## 10. Implementation order
 1. ✅ Scaffold CCDS, `git init`, uv env on 3.12, move raw CSV. (Data dictionary moves to Phase 2.)
-2. 🟡 `dataset.py` + notebook 1.0 (univariate pass + TotalCharges fix done in the notebook; data dictionary done; `dataset.py` pending) → 3. ✅ EDA notebook 2.0 (insights written; figures saved after modelling) → 4. 🟡 `features.py` (`collapse_no_internet` done; `build_preprocessor` pending)
+2. ✅ `dataset.py` + notebook 1.0 + data dictionary → 3. ✅ EDA notebook 2.0 (insights written; figures saved after modelling) → 4. 🟡 `features.py` (`collapse_no_internet` done; `build_preprocessor` pending)
 5. Baselines (3.0) → 6. Optuna + threshold + final model (4.0, `train.py`) → 7. SHAP (5.0)
 8. Streamlit app → 9. Docker → 10. Cloud Run → 11. README + tests polish.
 
