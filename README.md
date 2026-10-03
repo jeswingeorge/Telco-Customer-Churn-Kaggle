@@ -3,6 +3,8 @@
 Predict which telecom customers are likely to churn, so retention offers can be targeted.
 Dataset: [Kaggle – Telco Customer Churn](https://www.kaggle.com/datasets/blastchar/telco-customer-churn) (7,043 customers, ~26.5% churn).
 
+**🚀 Live app:** [https://churn-app-1012735950104.asia-south1.run.app](https://churn-app-1012735950104.asia-south1.run.app) (Streamlit on Google Cloud Run; the first visit may take a few seconds to wake up)
+
 ## Context
 "Predict behavior to retain customers. You can analyze all relevant customer data and develop focused customer retention programs." [IBM Sample Data Sets]
 
@@ -95,9 +97,37 @@ Full details: [reports/model_comparison.md](reports/model_comparison.md) and `no
 | XGBoost | 0.850 | 0.671 | 0.133 |
 | **Logistic Regression (elastic-net), chosen** | **0.848** | **0.665** | **0.134** |
 
-**Why Logistic Regression, although XGBoost scored slightly higher:** on 15 paired folds XGBoost was ahead by only +0.0013 ROC-AUC. At the chosen operating point that is about 12 fewer wasted offers per 2,000 customers contacted, far below the 0.01 AUC I'd need to give up interpretability. The churn signal is mostly additive (see the EDA), so the linear model loses almost nothing. Its coefficients can be read directly as odds ratios, its probabilities are well calibrated, and it trains 14× faster.
+**Why Logistic Regression, although XGBoost scored slightly higher?**
 
-**Threshold 0.307, not 0.5:** chosen on out-of-fold predictions as the best precision with **recall ≥ 75%**. Missing a churner (lost revenue, ~$74/month) costs far more than an unnecessary retention offer. Class weighting was tested and rejected: it gave the same precision and recall as moving the threshold, but distorted the probabilities. F2 was rejected because it flags half of all customers, and the extra contacts churn at only the base rate.
+The gap is tiny: XGBoost scored 0.850 ROC-AUC and Logistic Regression 0.848. Comparing them on the same 15 cross-validation splits, XGBoost was ahead by only **0.0013** on average. In business terms that means roughly **12 fewer wasted offers per 2,000 customers contacted**, which is almost nothing. My rule was to pick the more complex model only if it won by at least 0.01.
+
+For that small gap, Logistic Regression gives a lot back:
+- **You can explain it in one sentence.** Example: *"a customer on a month-to-month contract has about 3.7× the odds of churning compared with one on a two-year contract."* That number comes straight from the model's coefficients. XGBoost is hundreds of decision trees added together; to explain even one prediction you need extra tools such as SHAP.
+- **Its probabilities can be trusted.** When it says "30% chance of churn", about 30 in 100 such customers really do churn (it is *calibrated*). That matters because the decision threshold below is chosen on these probabilities.
+- **It is simpler to run:** 14× faster to train, smaller, and easier to maintain.
+
+Why it loses almost nothing: the EDA showed that churn risk mostly *adds up* factor by factor (contract + tenure + internet type + payment method...). That is exactly the pattern a linear model captures. XGBoost's strength, finding complex interactions, has little extra to find here.
+
+**Why flag customers at 30.7% churn probability instead of 50%?**
+
+The model gives each customer a probability of churning. The **threshold** is the cut-off above which we call a customer "high risk" and send a retention offer. 50% is only the default; the right cut-off depends on what each kind of mistake costs:
+- **Missing a churner** (no offer, they leave): we lose a customer paying about **$74/month**.
+- **An unnecessary offer** (they would have stayed anyway): we lose only the cost of the offer, e.g. a small discount.
+
+Missing a churner is much more expensive, so it pays to flag more customers. Here is what the two thresholds do on the 1,409 test customers (374 of whom actually churned):
+
+| Threshold | Customers flagged | Churners caught | Churners missed | Offers to customers who'd have stayed |
+|---|---|---|---|---|
+| 0.50 (default) | 288 | 195 (52%) | 179 | 93 |
+| **0.307 (chosen)** | 523 | **286 (77%)** | **88** | 237 |
+
+Lowering the threshold catches **91 more churners** at the cost of **144 more offers** to customers who would have stayed. As long as an offer is much cheaper than losing a $74/month customer, that is a good trade.
+
+How 0.307 was picked: the goal was to **catch at least 75% of churners** (recall ≥ 75%), and among the thresholds that do, to choose the one with the fewest wasted offers (best precision). It was chosen on cross-validation predictions from the training data, never on the test set, so the test result above is an honest check.
+
+Alternatives I tested and rejected:
+- **Class weighting** (making churners count more during training) gave the same trade-off as simply moving the threshold, but distorted the probabilities.
+- **Optimising F2** (a score that favours recall) flagged half of all customers, and the extra people it flagged churned no more often than average.
 
 **Test set (1,409 customers, evaluated once):**
 
@@ -118,7 +148,7 @@ The test results are in line with cross-validation (ROC-AUC 0.848), so the estim
 The app scores only through `churn.modeling.predict` and the saved pipeline, so it can't drift from training.
 
 ## Live app
-**https://churn-app-1012735950104.asia-south1.run.app**
+**[https://churn-app-1012735950104.asia-south1.run.app](https://churn-app-1012735950104.asia-south1.run.app)**
 
 Hosted on Google Cloud Run with scale-to-zero (`min-instances 0`): it costs nothing while idle, so the **first visit after a quiet period takes a few seconds** (cold start) while a container starts. After that it responds immediately.
 
