@@ -1,0 +1,24 @@
+# Files Docker should NOT copy into the image (like .gitignore, but for `docker build`).
+# Smaller build context = faster builds, and no local junk inside the image.
+
+# Your Windows virtual environment: useless inside Linux; the image builds its own .venv
+.venv/
+
+# Not needed to run the app (the model is already trained and saved in models/)
+data/
+notebooks/
+reports/
+references/
+tests/
+docs/
+archive.zip
+interview_prep.md
+
+# Tooling, caches and git history
+.git/
+.claude/
+.ruff_cache/
+.pytest_cache/
+**/__pycache__/
+**/*.pyc
+.ipynb_checkpoints/

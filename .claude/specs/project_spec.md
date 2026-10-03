@@ -3,7 +3,7 @@
 ## Context
 You need an end-to-end churn project to show interviewers: clean structure (Cookiecutter Data Science v2), careful data work, a comparison of several models judged on metrics that suit imbalanced data (Precision, Recall, ROC-AUC, not plain accuracy), and a deployed app (Streamlit → Docker → GCP Cloud Run). The finished repo should show *judgement*: no leakage, a reasoned choice of threshold, results you can explain, and a working public URL.
 
-**Status (2026-10-03):** Phases 1–5 are **done** (scaffolding, cleaning, EDA, feature engineering, modelling). Notebooks: `1_data-explore.ipynb` (univariate + `TotalCharges` fix), `2_bi_multivariate_analysis.ipynb` (EDA, 7 business insights), `3_feature_engg.ipynb`, `4_baselines.ipynb` (the spec's 3.0: baselines + feature ablation), `5_tuning_final.ipynb` (the spec's 4.0: Optuna, threshold, model choice, final fit). Package: `churn.dataset` (raw CSV → `data/processed/telco_churn_clean.parquet`), `churn.features`, `churn.evaluate`, `churn.modeling.train` (tunes, selects, fits, saves) and `churn.modeling.predict` (loads the artifact, validates, scores). **Final model:** unweighted elastic-net Logistic Regression, threshold 0.307; test ROC-AUC 0.846, PR-AUC 0.651, recall 0.765, precision 0.547. `models/churn_model.joblib` + `models/metadata.json` and `reports/model_comparison.md` are generated. **Deferred by the user (2026-10-03):** the pytest suite (section 11) and Phase 7 SHAP (section 6). **Next:** Streamlit app (section 7) → Docker (section 8) → Cloud Run (section 9). `docker` and `gcloud` are **not** installed yet.
+**Status (2026-10-03):** Phases 1–5 are **done** (scaffolding, cleaning, EDA, feature engineering, modelling). Notebooks: `1_data-explore.ipynb` (univariate + `TotalCharges` fix), `2_bi_multivariate_analysis.ipynb` (EDA, 7 business insights), `3_feature_engg.ipynb`, `4_baselines.ipynb` (the spec's 3.0: baselines + feature ablation), `5_tuning_final.ipynb` (the spec's 4.0: Optuna, threshold, model choice, final fit). Package: `churn.dataset` (raw CSV → `data/processed/telco_churn_clean.parquet`), `churn.features`, `churn.evaluate`, `churn.modeling.train` (tunes, selects, fits, saves) and `churn.modeling.predict` (loads the artifact, validates, scores). **Final model:** unweighted elastic-net Logistic Regression, threshold 0.307; test ROC-AUC 0.846, PR-AUC 0.651, recall 0.765, precision 0.547. `models/churn_model.joblib` + `models/metadata.json` and `reports/model_comparison.md` are generated. **Deferred by the user (2026-10-03):** the pytest suite (section 11) and Phase 7 SHAP (section 6). Streamlit app (section 7) and Docker (section 8) are **done** (2026-10-03). **Next:** Cloud Run (section 9). Docker Desktop is installed; `gcloud` is **not** installed yet.
 
 **Tutor skill:** `.claude/skills/churn-tutor/SKILL.md` (user-invoked only) runs Socratic tutoring phase by phase (no interview quizzes unless asked).
 
@@ -45,7 +45,7 @@ Telco-Customer-Churn-Kaggle/
 ```
 `.gitignore` ignores `/data/`, `archive.zip`, `.venv/`, caches, notebook checkpoints and `.env`. `models/churn_model.joblib` stays tracked so the Docker build is self-contained. Empty folders hold a `.gitkeep`.
 
-**Dependencies (in `pyproject.toml`):** runtime: pandas, numpy, scikit-learn, xgboost, joblib, shap, streamlit, matplotlib, seaborn. Dev group: jupyterlab, ipykernel, optuna, pytest, ruff.
+**Dependencies (in `pyproject.toml`):** runtime (what the app/Docker image needs): pandas, numpy, scikit-learn, scipy, joblib, pyarrow, streamlit, matplotlib. Dev group (training/analysis, local only): jupyterlab, ipykernel, optuna, pytest, ruff, xgboost, shap, seaborn. **Decision (2026-10-03):** xgboost, shap and seaborn moved to dev so the Docker image skips them (xgboost pulls ~345 MB of NVIDIA GPU libs on Linux; image 4.17 GB → 1.98 GB, compressed 1.32 GB → 456 MB). `uv sync` still installs them locally; `train.py` and the notebooks are unaffected.
 
 ## 2. Data cleaning (`churn/dataset.py`, notebook 1.0, `references/data_dictionary.md`)
 Known quirks to handle and *document in the notebook*:
@@ -131,11 +131,12 @@ Known quirks to handle and *document in the notebook*:
 - The feature engineering lives in the saved pipeline (or in `churn.features`, imported), so the app and training transform data the same way.
 - Verified with `streamlit.testing.v1.AppTest` (renders without exceptions, re-scores when inputs change, add-ons disabled with no internet), batch scoring on the raw CSV (7,043 scored, bad rows flagged) and a headless server health check (`/_stcore/health` → `ok`).
 
-## 8. Docker (`Dockerfile`)
+## 8. Docker (`Dockerfile`): ✅ done (2026-10-03)
+- Written 2026-10-03 (`Dockerfile` + `.dockerignore`, commented line by line). uv 0.12.10 is copied from `ghcr.io/astral-sh/uv`; dependencies are installed in a separate layer (`--no-install-project`) before the code is copied, for build caching. Claude's test build: health check `ok`, runs as `appuser`, model loads; the user then built and ran it and checked the app at http://localhost:8080. Image 1.98 GB on disk (456 MB compressed) after moving xgboost/shap/seaborn to dev (section 1).
 - `python:3.12-slim`; install only the runtime deps with `uv sync --frozen --no-dev`; copy `churn/`, `app/`, `models/`. The app must not import `churn.modeling.train` (Optuna is a dev dependency).
 - Run as a non-root user; `CMD streamlit run app/streamlit_app.py --server.port=${PORT:-8080} --server.address=0.0.0.0 --server.headless=true`.
-- `.dockerignore`: data/, notebooks/, .venv, reports/, tests/.
-- Local check: `docker build -t churn-app . && docker run -p 8080:8080 churn-app`.
+- `.dockerignore`: .venv, data/, notebooks/, reports/, references/, tests/, docs/, archive.zip, interview_prep.md, .git, .claude, caches.
+- Local check: `docker build -t churn-app .` then `docker run --rm -p 8080:8080 churn-app` → http://localhost:8080.
 
 ## 9. GCP Cloud Run deployment
 Prerequisites: install Docker Desktop + Google Cloud SDK; have a GCP project with billing enabled.
@@ -149,7 +150,7 @@ Prerequisites: install Docker Desktop + Google Cloud SDK; have a GCP project wit
 1. ✅ Scaffold CCDS, `git init`, uv env on 3.12, move raw CSV. (Data dictionary moves to Phase 2.)
 2. ✅ `dataset.py` + notebook 1.0 + data dictionary → 3. ✅ EDA notebook 2.0 (insights written; figures saved after modelling) → 4. ✅ `features.py` (`collapse_no_internet`, `add_features`, `build_preprocessor`; built and checked in `3_feature_engg.ipynb`)
 5. ✅ Baselines + feature ablation (`4_baselines.ipynb`) → 6. ✅ Optuna + threshold + final model (`5_tuning_final.ipynb`, `train.py`, `evaluate.py`, `predict.py`) → 7. SHAP (5.0): ⏸ deferred
-8. ✅ Streamlit app (`app/streamlit_app.py`) → 9. **Next:** Docker → 10. Cloud Run → 11. README + tests polish (the pytest suite is deferred to here).
+8. ✅ Streamlit app (`app/streamlit_app.py`) → 9. ✅ Docker → 10. **Next:** Cloud Run → 11. README + tests polish (the pytest suite is deferred to here).
 
 ## 11. Verification
 - `uv run pytest` (deferred, not written yet): the cleaning output has no nulls and a numeric TotalCharges (in the interim data; it is not a model feature); the pipeline fits/predicts on a sample; `predict.py` returns probabilities in [0,1] and respects the threshold.

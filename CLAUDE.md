@@ -34,7 +34,8 @@ Telco customer churn prediction: a portfolio project for data science interviews
   - The user ran `train.py`: it reproduced the notebook (same params, threshold 0.3067, test ROC-AUC 0.846). `models/` and `reports/model_comparison.md` + `reports/figures/final_model_test_curves.png` are generated and committed.
 - **Deferred by the user (2026-10-03):** the pytest suite (spec section 11) and Phase 7 SHAP (spec section 6).
 - Streamlit app `app/streamlit_app.py` written by Claude at the user's request (2026-10-03): live sidebar inputs (no `st.form`; dropdown options come from the fitted encoder; add-ons disabled when no internet), 3 tabs (single customer + "why this score" = LR coef × transformed value grouped per feature, batch CSV upload/download, model card from `metadata.json`). Scores only via `churn.modeling.predict`. Checked headless with `streamlit.testing.v1.AppTest`. Phase 7 (Streamlit) is **done**; details in spec section 7.
-- **Next:** Docker (spec section 8: `Dockerfile` + `.dockerignore`, then `docker build`/`docker run` locally) → Cloud Run (section 9). The user has never used Docker or gcloud: go one concept at a time with exact commands and expected output (see *Working with the user*). Docker Desktop and gcloud must be installed first. The app scores only through `churn.modeling.predict`.
+- Docker (spec section 8) is **done** (2026-10-03): `Dockerfile` + `.dockerignore` (written by Claude, commented line by line); the user built and ran it and checked http://localhost:8080. Image 1.98 GB (456 MB compressed).
+- **Next:** Cloud Run (spec section 9). The user has never used gcloud or GCP: go one concept at a time with exact commands and expected output (see *Working with the user*). Install the Google Cloud SDK and set up a GCP project with billing first. The app scores only through `churn.modeling.predict`.
 - Before editing `churn/*.py`, check with the user: they prototype logic in the notebook first and usually write the module code themselves from a skeleton (exception: for `evaluate.py`, `train.py` and `predict.py` they asked Claude to write the code directly). Ask the same for the app.
 - `uv run ruff check churn/ app/` must pass before a commit. The user is new to ruff; it was explained as a linter (catches bugs like undefined/unused names, keeps imports and style consistent). The project has no ruff config, so it uses ruff 0.16's defaults (line length 88).
 - The notebook names `1_data-explore.ipynb` and `3_feature_engg.ipynb` differ from the spec's convention (`N.0-jg-<topic>.ipynb`; the spec's "notebook 3.0" is `4_baselines.ipynb` and "4.0" is `5_tuning_final.ipynb`). Ask the user before renaming them.
@@ -61,10 +62,11 @@ Telco customer churn prediction: a portfolio project for data science interviews
   - `uv run python -m churn.modeling.predict [--input csv] [--output csv]` scores customers with the saved model
   - `uv run pytest` (no tests yet) / `uv run ruff check churn/ app/`
   - `uv run streamlit run app/streamlit_app.py`
-  - `docker build -t churn-app . && docker run -p 8080:8080 churn-app`
+  - `docker build -t churn-app .` then `docker run --rm -p 8080:8080 churn-app` (app at http://localhost:8080)
 - Windows machine: shell is PowerShell/Git Bash; `make` may be missing, so keep Makefile targets as thin wrappers that also document the `uv run` equivalent.
 - Windows Application Control blocks executables run from uv's cache, so `uvx <tool>` fails. Install tools into the project instead (`uv add --dev`) and use `uv run`.
-- Docker Desktop and gcloud are not installed yet (needed for the deploy phases).
+- Docker Desktop 29.8 is installed and working (2026-10-03). gcloud is not installed yet (needed for Cloud Run).
+- xgboost, shap and seaborn are **dev** dependencies (2026-10-03), so the Docker image (`uv sync --no-dev`) skips them. Never import them from `app/` or `churn.modeling.predict`.
 
 ## Project conventions
 - Layout follows CCDS v2. Reusable logic goes in the `churn/` package; notebooks (`notebooks/N.0-jg-<topic>.ipynb`) import from it and tell the story.

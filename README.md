@@ -26,7 +26,8 @@ Each row represents a customer, each column contains customer’s attributes des
 | 5. Modelling (`notebooks/4_baselines.ipynb`, `notebooks/5_tuning_final.ipynb`, `churn/modeling/`) | ✅ Done: baselines, feature ablation, Optuna tuning, threshold, model choice, saved model |
 | 6. SHAP explainability | ⏸ Deferred |
 | 7. Streamlit app (`app/streamlit_app.py`) | ✅ Done: single-customer scoring with reasons, batch CSV scoring, model card |
-| 8. Docker · 9. Cloud Run | ⏳ Next |
+| 8. Docker (`Dockerfile`) | ✅ Done: slim Python 3.12 image, runtime deps only, non-root user |
+| 9. Cloud Run | ⏳ Next |
 | Tests (pytest) | ⏸ Deferred |
 
 ## Data findings so far
@@ -142,4 +143,11 @@ uv run streamlit run app/streamlit_app.py   # the app at http://localhost:8501
 uv run jupyter lab           # open the notebooks
 ```
 The raw CSV is not committed: download it from Kaggle into `data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv`.
-_Docker and Cloud Run commands will be added in the next phases._
+### With Docker
+```bash
+docker build -t churn-app .                  # build the image (Python 3.12 + runtime deps + churn/ + app/ + models/)
+docker run --rm -p 8080:8080 churn-app       # then open http://localhost:8080
+```
+The image installs only the runtime dependencies from `uv.lock` (`uv sync --frozen --no-dev`), so it uses the same library versions the model was trained with. Training-only libraries (xgboost, shap, optuna, jupyter) live in the dev group and stay out of the image, which halves it (4.2 GB → 2.0 GB; 456 MB compressed). It runs as a non-root user and listens on `$PORT` (default 8080), as Cloud Run expects.
+
+_Cloud Run commands will be added in the next phase._

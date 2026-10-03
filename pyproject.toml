@@ -10,10 +10,7 @@ dependencies = [
     "pyarrow>=25.0.1",
     "scikit-learn>=1.9.1",
     "scipy>=1.18.1",
-    "seaborn>=0.13.2",
-    "shap>=0.52.0",
     "streamlit>=1.64.0",
-    "xgboost>=3.4.1",
 ]
 
 [dependency-groups]
@@ -23,6 +20,9 @@ dev = [
     "optuna>=5.0.0",
     "pytest>=9.1.1",
     "ruff>=0.16.9",
+    "seaborn>=0.13.2",
+    "shap>=0.52.0",
+    "xgboost>=3.4.1",
 ]
 
 [build-system]
