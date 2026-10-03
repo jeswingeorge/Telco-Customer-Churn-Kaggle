@@ -45,10 +45,20 @@ TENURE_LABELS = ["0-6", "7-12", "13-24", "25-48", "49-72"]
 # num_services counts "Yes" across these add-on columns.
 ADDON_COLS = NO_INTERNET_COLS
 
+# add_features builds all three; only tenure_group is a model feature (see the feature lists below).
 ENGINEERED_FEATURES = ["tenure_group", "num_services", "has_family"]
 
 # ---- Model feature lists (used by churn.features.build_preprocessor) ----
 # Everything not listed here (DROP_COLS, the target) is dropped by remainder="drop".
-NUM_COLS = ["tenure", "MonthlyCharges", "num_services"]
-CAT_COLS = ['SeniorCitizen', 'Partner', 'Dependents', 'MultipleLines', 'InternetService', 'OnlineSecurity', 'OnlineBackup', 'DeviceProtection', 'TechSupport', 'StreamingTV', 'Contract', 'PaperlessBilling', 'PaymentMethod', 'tenure_group', 'has_family']
+# Chosen by the CV ablation in notebooks/4_baselines.ipynb (step 5, 2026-10-03):
+#   - tenure_group kept: removing it costs LR -0.003 ROC-AUC / -0.004 PR-AUC (models the first-6-months kink).
+#   - num_services removed: an exact sum of the 5 add-on binaries; identical CV for LR, and the
+#     binaries say *which* service matters (actionable in SHAP).
+#   - has_family removed: no CV gain (+0.0004 LR, noise) and Partner/Dependents already carry it.
+NUM_COLS = ["tenure", "MonthlyCharges"]
+CAT_COLS = [
+    "SeniorCitizen", "Partner", "Dependents", "MultipleLines", "InternetService",
+    "OnlineSecurity", "OnlineBackup", "DeviceProtection", "TechSupport", "StreamingTV",
+    "Contract", "PaperlessBilling", "PaymentMethod", "tenure_group",
+]
 
