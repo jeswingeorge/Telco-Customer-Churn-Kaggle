@@ -26,7 +26,7 @@ Each row represents a customer, each column contains customer’s attributes des
 | 3. EDA (`notebooks/2_bi_multivariate_analysis.ipynb`) | ✅ Done: feature decisions and 7 business insights (figures saved after modelling) |
 | 4. Feature engineering (`notebooks/3_feature_engg.ipynb`, `churn/features.py`) | ✅ Done: 3 engineered features and the preprocessing `ColumnTransformer` |
 | 5. Modelling (`notebooks/4_baselines.ipynb`, `notebooks/5_tuning_final.ipynb`, `churn/modeling/`) | ✅ Done: baselines, feature ablation, Optuna tuning, threshold, model choice, saved model |
-| 6. SHAP explainability | ⏸ Deferred |
+| 6. SHAP explainability (`notebooks/6_explainability_shap.ipynb`) | ✅ Done: global drivers, per-customer explanations, LR vs XGBoost agreement |
 | 7. Streamlit app (`app/streamlit_app.py`) | ✅ Done: single-customer scoring with reasons, batch CSV scoring, model card |
 | 8. Docker (`Dockerfile`) | ✅ Done: slim Python 3.12 image, runtime deps only, non-root user |
 | 9. Cloud Run | ✅ Done: [live app](https://churn-app-1012735950104.asia-south1.run.app) (Cloud Build + Artifact Registry, scale-to-zero) |
@@ -139,6 +139,23 @@ The test results are in line with cross-validation (ROC-AUC 0.848), so the estim
 
 **What drives churn (model odds ratios):** month-to-month contract 2.0 vs two-year 0.55 (≈3.7× the odds), first 6 months of tenure 1.7, fibre optic 1.6, electronic check 1.4; online security (0.66) and tech support (0.70) go with staying. These match the EDA findings.
 
+## Explainability (SHAP)
+Notebook: `notebooks/6_explainability_shap.ipynb`. **SHAP** splits each customer's score into a push from every feature, compared with the average customer. Positive = towards churn, negative = towards staying, and the pushes add up exactly to the model's score. For logistic regression this is exact: `coefficient × (customer's value − average value)`.
+
+![Feature importance](reports/figures/shap_importance_bar.png)
+
+**What it shows:**
+- **Top drivers:** tenure, contract type, monthly charges and internet service.
+- **Direction (average push, log-odds):** month-to-month +0.46 vs two-year −0.84 (≈3.7× the odds), first 6 months of tenure +1.24 vs 49–72 months −0.80, fibre optic +0.34, electronic check +0.24; online security (−0.29) and tech support (−0.26) protect.
+- **The first 6 months matter most.** The `tenure_group` feature adds about +0.5 on top of the straight-line tenure effect for new customers, confirming the EDA's early-churn finding.
+- **XGBoost agrees.** SHAP on the runner-up XGBoost ranks the features almost the same way (Spearman 0.90, same top 4). Two very different models pointing to the same drivers means they are real patterns, not quirks of one model.
+
+**One customer explained:** a borderline case (P = 0.31, just above the 0.307 threshold). 65 months of loyalty pull the score down, but a $106 bill, fibre optic and electronic check push it back up. This customer did churn. The 0.307 threshold caught them; 0.5 would not have.
+
+![Borderline customer](reports/figures/shap_waterfall_borderline.png)
+
+**Business actions:** move month-to-month customers to longer contracts, focus onboarding on the first 6 months, bundle security/tech support with fibre, encourage automatic payment, and watch long-standing customers with high bills. *(These are associations the model learned, not proven causes.)*
+
 ## Streamlit app
 `uv run streamlit run app/streamlit_app.py`, then open http://localhost:8501.
 - **Single customer:** fill in the sidebar; the churn probability and risk label (threshold 0.307) update live. A "Why this score?" table shows the top features pushing this customer's log-odds up or down (logistic-regression coefficient × scaled/one-hot value; associations, not causes).
@@ -152,11 +169,13 @@ The app scores only through `churn.modeling.predict` and the saved pipeline, so 
 
 Hosted on Google Cloud Run with scale-to-zero (`min-instances 0`): it costs nothing while idle, so the **first visit after a quiet period takes a few seconds** (cold start) while a container starts. After that it responds immediately.
 
+![Streamlit app: churn probability, risk label and the features behind the score](reports/figures/app_screenshot.png)
+
 ## Project organization
 ```
 ├── data/{raw,interim,processed,external}   <- git-ignored; raw CSV goes in data/raw/
 ├── models/          <- churn_model.joblib (full pipeline) + metadata.json (threshold, metrics, versions)
-├── notebooks/       <- 1_data-explore (cleaning + univariate), 2_bi_multivariate_analysis (EDA), 3_feature_engg, 4_baselines (baselines + feature ablation), 5_tuning_final (tuning, threshold, model choice, final fit)
+├── notebooks/       <- 1_data-explore (cleaning + univariate), 2_bi_multivariate_analysis (EDA), 3_feature_engg, 4_baselines (baselines + feature ablation), 5_tuning_final (tuning, threshold, model choice, final fit), 6_explainability_shap (SHAP)
 ├── references/      <- data dictionary and other reference material
 ├── reports/         <- model_comparison.md + figures/
 ├── churn/           <- source package: config, dataset, features, stats, evaluate, modeling/{train,predict}
@@ -199,4 +218,9 @@ gcloud run deploy churn-app \
 - The image is built in the cloud from the same `Dockerfile`; `.gcloudignore` uploads only the files it needs (~20 files).
 - `--min-instances 0` scales to zero (no idle cost, short cold start); `--max-instances 2` caps the cost.
 - `--session-affinity` keeps each user on one container, because Streamlit keeps the session (and uploaded CSVs) in memory; `--timeout 3600` lets its WebSocket connection stay open.
-- New version: `gcloud builds submit --substitutions=_TAG=v2`, then deploy `:v2`. Each deploy is a new revision, so you can roll back.
+- New version: `gcloud builds submit --substitutions=_TAG=v2`, then deploy `:v2`. Each deploy is a new revision, so you can roll back while the old image exists.
+- Clean up old images once the new version is verified (the live app currently runs `v2`):
+  ```bash
+  gcloud artifacts docker images delete asia-south1-docker.pkg.dev/<project-id>/churn-repo/churn-app:v1 --delete-tags
+  ```
+  Never delete the image the serving revision uses (`gcloud run revisions list --service churn-app`).

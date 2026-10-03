@@ -3,7 +3,7 @@
 ## Context
 You need an end-to-end churn project to show interviewers: clean structure (Cookiecutter Data Science v2), careful data work, a comparison of several models judged on metrics that suit imbalanced data (Precision, Recall, ROC-AUC, not plain accuracy), and a deployed app (Streamlit → Docker → GCP Cloud Run). The finished repo should show *judgement*: no leakage, a reasoned choice of threshold, results you can explain, and a working public URL.
 
-**Status (2026-10-03):** Phases 1–5 are **done** (scaffolding, cleaning, EDA, feature engineering, modelling). Notebooks: `1_data-explore.ipynb` (univariate + `TotalCharges` fix), `2_bi_multivariate_analysis.ipynb` (EDA, 7 business insights), `3_feature_engg.ipynb`, `4_baselines.ipynb` (the spec's 3.0: baselines + feature ablation), `5_tuning_final.ipynb` (the spec's 4.0: Optuna, threshold, model choice, final fit). Package: `churn.dataset` (raw CSV → `data/processed/telco_churn_clean.parquet`), `churn.features`, `churn.evaluate`, `churn.modeling.train` (tunes, selects, fits, saves) and `churn.modeling.predict` (loads the artifact, validates, scores). **Final model:** unweighted elastic-net Logistic Regression, threshold 0.307; test ROC-AUC 0.846, PR-AUC 0.651, recall 0.765, precision 0.547. `models/churn_model.joblib` + `models/metadata.json` and `reports/model_comparison.md` are generated. **Deferred by the user (2026-10-03):** the pytest suite (section 11) and Phase 7 SHAP (section 6). Streamlit app (section 7), Docker (section 8) and Cloud Run (section 9) are **done** (2026-10-03); live at https://churn-app-1012735950104.asia-south1.run.app; images are in Artifact Registry (`churn-repo/churn-app`, console: Artifact Registry → churn-repo). README polish started (2026-10-03): live link at the top; the model-choice and threshold explanations were rewritten in plain language with a worked example (test set at 0.5 vs 0.307: 195 vs 286 churners caught, 93 vs 237 unnecessary offers). **Next:** README screenshot of the live app, the user's same-customer check on the live URL, `git push`; then the deferred tests/SHAP if the user wants them.
+**Status (2026-10-03):** Phases 1–5 are **done** (scaffolding, cleaning, EDA, feature engineering, modelling). Notebooks: `1_data-explore.ipynb` (univariate + `TotalCharges` fix), `2_bi_multivariate_analysis.ipynb` (EDA, 7 business insights), `3_feature_engg.ipynb`, `4_baselines.ipynb` (the spec's 3.0: baselines + feature ablation), `5_tuning_final.ipynb` (the spec's 4.0: Optuna, threshold, model choice, final fit). Package: `churn.dataset` (raw CSV → `data/processed/telco_churn_clean.parquet`), `churn.features`, `churn.evaluate`, `churn.modeling.train` (tunes, selects, fits, saves) and `churn.modeling.predict` (loads the artifact, validates, scores). **Final model:** unweighted elastic-net Logistic Regression, threshold 0.307; test ROC-AUC 0.846, PR-AUC 0.651, recall 0.765, precision 0.547. `models/churn_model.joblib` + `models/metadata.json` and `reports/model_comparison.md` are generated. **Deferred by the user (2026-10-03):** the pytest suite (section 11). SHAP (section 6) is **done** (2026-10-03, `6_explainability_shap.ipynb`). Streamlit app (section 7), Docker (section 8) and Cloud Run (section 9) are **done** (2026-10-03); live at https://churn-app-1012735950104.asia-south1.run.app; images are in Artifact Registry (`churn-repo/churn-app`, console: Artifact Registry → churn-repo). README polish started (2026-10-03): live link at the top; the model-choice and threshold explanations were rewritten in plain language with a worked example (test set at 0.5 vs 0.307: 195 vs 286 churners caught, 93 vs 237 unnecessary offers). The user checked the same test customer on the live URL (matches local), and the screenshot `reports/figures/app_screenshot.png` is in the README; everything is pushed to GitHub. The app fix found by the SHAP notebook is live as `v2` (revision `churn-app-00002-fwb`, 100% of traffic); the `v1` image was deleted from Artifact Registry. **Next:** the deferred pytest suite (section 11, the user will do it later).
 
 **Tutor skill:** `.claude/skills/churn-tutor/SKILL.md` (user-invoked only) runs Socratic tutoring phase by phase (no interview quizzes unless asked).
 
@@ -28,7 +28,7 @@ Telco-Customer-Churn-Kaggle/
 │   ├── 2.0-jg-eda.ipynb
 │   ├── 3.0-jg-baseline-models.ipynb
 │   ├── 4.0-jg-tuning-and-selection.ipynb
-│   └── 5.0-jg-explainability-shap.ipynb
+│   └── 5.0-jg-explainability-shap.ipynb  (actual name: 6_explainability_shap.ipynb)
 ├── reports/figures/ + reports/model_comparison.md
 ├── references/data_dictionary.md
 ├── .claude/specs/project_spec.md   # this file
@@ -116,7 +116,14 @@ Known quirks to handle and *document in the notebook*:
   - Built as code: `uv run python -m churn.modeling.train` (≈3–4 min; `--n-trials N` for a quick run) reproduces the notebook's parameters, threshold and test metrics. `churn/evaluate.py` holds the metric/threshold/plot helpers.
   - `churn/modeling/predict.py`: `load_model()` (cached; warns on a scikit-learn version mismatch), `validate()`, `predict(df)`, `predict_one(dict)`. Rows with tenure outside 0–72, missing/non-numeric numbers or category levels the fitted encoder never saw are returned as "Not scored" with a reason. Accepts the raw Kaggle format (SeniorCitizen 0/1) and the cleaned one. CLI: `uv run python -m churn.modeling.predict [--input csv] [--output csv]`.
 
-## 6. Explainability (notebook 5.0) — deferred (user's decision, 2026-10-03)
+## 6. Explainability (`notebooks/6_explainability_shap.ipynb`): ✅ done (2026-10-03)
+Written and run by Claude at the user's request (markdown explains each concept and result). Generated figures: `reports/figures/shap_*.png`.
+- `LinearExplainer` on the saved LR with an `Independent` masker over the **whole** training set (`max_samples=len(Z_train)`; the default subsamples 100). Explains the transformed test set (`model[:-1]`). Base value −1.574 log-odds (P 0.172); additivity error ~1e-16.
+- One-hot SHAP values are summed back into the 16 features (match the **longest feature name first**: `tenure_group_*` also starts with `tenure_`).
+- Results: mean |SHAP| order tenure 0.54, Contract 0.50, MonthlyCharges 0.44, InternetService 0.30, tenure_group 0.21, ... Partner 0 (elastic-net zeroed it). Average SHAP per level: month-to-month +0.46 / two-year −0.84; fibre +0.34; electronic check +0.24; OnlineSecurity Yes −0.29; TechSupport Yes −0.26; tenure 0–6 total +1.24 (tenure_group adds ~+0.5), 49–72 −0.80. The bins cause ~0.2 step jumps at band edges (a spline would be smoother; not done).
+- Waterfalls: highest-risk churner (P 0.89), lowest-risk stayer (P 0.006), borderline customer closest to the threshold (P 0.307, 65 months but $106 fibre + electronic check; churned; caught at 0.307, missed at 0.5).
+- XGBoost refitted with the tuned params from `5_tuning_final.ipynb` + `TreeExplainer`: Spearman 0.90 with LR's ranking, same top 4; XGB relies less on `tenure_group` (trees find the early-tenure jump from raw tenure).
+- **Bug found and fixed:** the app's `top_reasons()` matched `tenure` before `tenure_group`, so the tenure_group push was shown under "tenure". Fixed in `app/streamlit_app.py` (longest name first) and redeployed as `v2` (2026-10-03).
 - SHAP (`TreeExplainer` for XGB/DT, `LinearExplainer` for LR) on the transformed test set: summary/beeswarm plot, top-feature bar chart, and 2–3 waterfall plots for individual customers.
 - Compare the SHAP results with the EDA insights (they should agree).
 
@@ -139,7 +146,7 @@ Known quirks to handle and *document in the notebook*:
 - Local check: `docker build -t churn-app .` then `docker run --rm -p 8080:8080 churn-app` → http://localhost:8080.
 
 ## 9. GCP Cloud Run deployment: ✅ done (2026-10-03)
-**Live:** https://churn-app-1012735950104.asia-south1.run.app (revision `churn-app-00001-6q4`). Project `project-ddf6c9f3-f5d6-49e3-bb0` (number 1012735950104), region `asia-south1` (Mumbai, set as `run/region`), billing enabled.
+**Live:** https://churn-app-1012735950104.asia-south1.run.app. Revisions: `churn-app-00001-6q4` (image `v1`, deleted from Artifact Registry, so it can no longer run or be rolled back to) and `churn-app-00002-fwb` (image `v2`, with the `top_reasons()` grouping fix; 100% of traffic). Project `project-ddf6c9f3-f5d6-49e3-bb0` (number 1012735950104), region `asia-south1` (Mumbai, set as `run/region`), billing enabled.
 1. `gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com`
 2. `gcloud artifacts repositories create churn-repo --repository-format=docker --location=asia-south1`
 3. One-time IAM fix: new projects no longer give the Compute Engine default service account (which Cloud Build runs as) Editor, so the first build failed with `storage.objects.get` denied. Fix: `gcloud projects add-iam-policy-binding <project> --member="serviceAccount:<project-number>-compute@developer.gserviceaccount.com" --role="roles/cloudbuild.builds.builder"` (read source, write logs, push to Artifact Registry).
@@ -148,12 +155,13 @@ Known quirks to handle and *document in the notebook*:
    - `--session-affinity`: Streamlit keeps each session in one container's memory; without it a CSV upload can hit the other instance and fail.
    - `--timeout 3600`: Streamlit holds a WebSocket open; the 300 s default would force reconnects.
    - min-instances 0 = scale to zero (no cost when idle, cold start of a few seconds); max 2 caps cost. Startup CPU boost is on by default.
-- Verified: `/_stcore/health` returns `ok` on the live URL; settings confirmed with `gcloud run services describe`. Still to do: a README screenshot, and the user's same-customer check (about 80% High risk, see section 11).
+- **Updating the app (done once, v1 → v2, 2026-10-03):** `gcloud builds submit --substitutions=_TAG=v2` → `gcloud run deploy ... :v2` (same flags) → check the live app → delete the old image with `gcloud artifacts docker images delete <...>/churn-app:v1 --delete-tags`. Rule: never delete the image of the revision that is serving traffic; keep the previous image for a few days as a rollback option. Only `v2` is stored now (~456 MB).
+- Verified: `/_stcore/health` returns `ok` on the live URL; settings confirmed with `gcloud run services describe`. The user's same-customer check on the live URL matched local (section 11); the README has a screenshot.
 
 ## 10. Implementation order
 1. ✅ Scaffold CCDS, `git init`, uv env on 3.12, move raw CSV. (Data dictionary moves to Phase 2.)
 2. ✅ `dataset.py` + notebook 1.0 + data dictionary → 3. ✅ EDA notebook 2.0 (insights written; figures saved after modelling) → 4. ✅ `features.py` (`collapse_no_internet`, `add_features`, `build_preprocessor`; built and checked in `3_feature_engg.ipynb`)
-5. ✅ Baselines + feature ablation (`4_baselines.ipynb`) → 6. ✅ Optuna + threshold + final model (`5_tuning_final.ipynb`, `train.py`, `evaluate.py`, `predict.py`) → 7. SHAP (5.0): ⏸ deferred
+5. ✅ Baselines + feature ablation (`4_baselines.ipynb`) → 6. ✅ Optuna + threshold + final model (`5_tuning_final.ipynb`, `train.py`, `evaluate.py`, `predict.py`) → 7. ✅ SHAP (`6_explainability_shap.ipynb`)
 8. ✅ Streamlit app (`app/streamlit_app.py`) → 9. ✅ Docker → 10. ✅ Cloud Run → 11. **Next:** README + tests polish (the pytest suite is deferred to here).
 
 ## 11. Verification

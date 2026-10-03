@@ -66,7 +66,9 @@ def top_reasons(customer: dict, n: int = 5) -> pd.DataFrame:
 
     def original_feature(column_name):  # "cat__Contract_One year" -> "Contract"
         name = column_name.split("__", 1)[1]
-        for feature in config.NUM_COLS + config.CAT_COLS:
+        # Longest names first: "tenure_group_0-6" also starts with "tenure_", so checking
+        # "tenure" first would wrongly put the tenure_group columns under tenure.
+        for feature in sorted(config.NUM_COLS + config.CAT_COLS, key=len, reverse=True):
             if name == feature or name.startswith(feature + "_"):
                 return feature
         return name
