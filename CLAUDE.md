@@ -3,7 +3,7 @@
 Telco customer churn prediction: a portfolio project for data science interviews. The full spec is in [.claude/specs/project_spec.md](.claude/specs/project_spec.md). Read it before starting any phase, and update it when a decision changes.
 
 ## Current state
-- CCDS folders are created, and the `churn/` package has empty module stubs; `churn/config.py` holds paths and constants. The package is installed in editable mode through the `uv_build` backend in `pyproject.toml`, so notebooks can `import churn`.
+- CCDS folders are created; `churn/plots.py` is still an empty stub; `churn/config.py` holds paths and constants. The package is installed in editable mode through the `uv_build` backend in `pyproject.toml`, so notebooks can `import churn`.
 - Raw data is at `data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv` (Kaggle `blastchar/telco-customer-churn`, 7,043 rows).
 - Phase 1 (scaffolding) is committed. `pyarrow` is in the runtime deps for parquet I/O (`openpyxl` is also installed but no longer needed).
 - Phase 2 (data cleaning) is **done**. `notebooks/1_data-explore.ipynb` has the univariate analysis and writes `data/interim/telco_customer_churn_interim.parquet` (used by the EDA notebook).
@@ -23,13 +23,20 @@ Telco customer churn prediction: a portfolio project for data science interviews
   - `add_features` (stateless, a Pipeline step after `collapse_no_internet`) always adds `tenure_group` (fixed bins `config.TENURE_BINS`, 0–72 months), `num_services` (count of `"Yes"` over `config.ADDON_COLS` = `NO_INTERNET_COLS`) and `has_family`. Which ones a model uses is decided by the column lists.
   - `build_preprocessor(model_type, num_cols=None, cat_cols=None)` returns a `ColumnTransformer` (`remainder="drop"`, pandas output). `"lr"`: `StandardScaler` + `OneHotEncoder(drop="if_binary")` → 29 columns. `"tree"`: passthrough + `OneHotEncoder` without `drop` → 38 columns. The defaults are `config.NUM_COLS` / `config.CAT_COLS` (2 numerics, 14 categoricals; 31/41 columns before the Phase 5 ablation).
   - **Decision (2026-10-02): `tenure` is limited to 0–72 months** (the dataset's range). The Streamlit form enforces it, and batch rows outside it are flagged, not scored; the bins are not open-ended.
-- Phase 5 (modelling) is **in progress**, guided step by step (explain the concept + notebook code, the user runs it, then `.py` TODO skeletons at the end). Steps 1–5 are done in `notebooks/4_baselines.ipynb` (the spec's 3.0): split, `build_pipeline` (notebook-level for now), CV, baselines (LR best at 0.847 ROC-AUC; untuned trees overfit), feature ablation.
+- Phase 5 (modelling) is **done** (2026-10-03), guided step by step (concept + notebook code, the user ran it; Q&A answers are in markdown cells). Steps 1–5 are done in `notebooks/4_baselines.ipynb` (the spec's 3.0): split, `build_pipeline` (notebook-level for now), CV, baselines (LR best at 0.847 ROC-AUC; untuned trees overfit), feature ablation.
   - **Decision (2026-10-03):** final features = `NUM_COLS [tenure, MonthlyCharges]` + 14 `CAT_COLS` (`num_services` and `has_family` removed, `tenure_group` kept; TotalCharges and the other drops confirmed). Details in spec section 5.
-  - sklearn 1.9 deprecates `LogisticRegression(penalty=...)`; tune `l1_ratio` instead (update the spec's search space at step 6).
-- **Next:** steps 6–9 in `notebooks/5_tuning_final.ipynb` (Optuna, OOF threshold, model choice, final fit + save), then skeletons for `churn/evaluate.py` and `churn/modeling/train.py`.
-- Before editing `churn/*.py`, check with the user: they prototype logic in the notebook first and usually write the module code themselves from a skeleton.
+  - sklearn 1.9 deprecates `LogisticRegression(penalty=...)`; `l1_ratio` is tuned instead (with `solver="saga"`).
+  - Steps 6–8 are done in `notebooks/5_tuning_final.ipynb` (Optuna, OOF threshold, paired model comparison; answers are in markdown cells).
+  - **Decision (2026-10-03):** final model = **unweighted** elastic-net LR (`C ≈ 0.069`, `l1_ratio ≈ 0.23`), threshold ≈ 0.307 (best precision with OOF recall ≥ 0.75). Tuned XGB was only +0.0013 ROC-AUC; class weighting only shifts the threshold and hurts calibration. Details in spec section 5.
+  - Step 9 is done in the notebook (test: ROC-AUC 0.846, recall 0.765, precision 0.547 at threshold 0.307).
+  - `churn/evaluate.py` (`pick_thresholds`, `threshold_metrics`, `plot_test_curves`, `df_to_md`) and `churn/modeling/train.py` (the whole of steps 6–9 as a script; `--n-trials N` for a quick run) were written by Claude at the user's request (2026-10-03). `train.py` overwrites `models/` and `reports/model_comparison.md`. Optuna is imported inside `tune()` because it's a dev dependency.
+  - `churn/modeling/predict.py` (written by Claude at the user's request, 2026-10-03): `load_model()` (cached; warns if the scikit-learn version differs from the metadata), `validate()`, `predict(df)` and `predict_one(dict)`. Rows with tenure outside 0–72, missing or non-numeric numbers, or category levels the fitted encoder never saw are flagged "Not scored" instead of being scored silently (`handle_unknown="ignore"` would otherwise hide typos). It accepts both the raw Kaggle format (SeniorCitizen 0/1) and the cleaned one. CLI: `uv run python -m churn.modeling.predict [--input csv] [--output csv]`.
+  - The user ran `train.py`: it reproduced the notebook (same params, threshold 0.3067, test ROC-AUC 0.846). `models/` and `reports/model_comparison.md` + `reports/figures/final_model_test_curves.png` are generated and committed.
+- **Deferred by the user (2026-10-03):** the pytest suite (spec section 11) and Phase 7 SHAP (spec section 6).
+- **Next:** Streamlit app (`app/streamlit_app.py`, spec section 7) → Docker (section 8) → Cloud Run (section 9). The user has never used Streamlit, Docker or gcloud: go one concept at a time with exact commands and expected output (see *Working with the user*). Docker Desktop and gcloud must be installed first. The app scores only through `churn.modeling.predict`.
+- Before editing `churn/*.py`, check with the user: they prototype logic in the notebook first and usually write the module code themselves from a skeleton (exception: for `evaluate.py`, `train.py` and `predict.py` they asked Claude to write the code directly). Ask the same for the app.
 - `uv run ruff check churn/` must pass before a commit. The user is new to ruff; it was explained as a linter (catches bugs like undefined/unused names, keeps imports and style consistent). The project has no ruff config, so it uses ruff 0.16's defaults (line length 88).
-- The notebook names `1_data-explore.ipynb` and `3_feature_engg.ipynb` differ from the spec's convention (`N.0-jg-<topic>.ipynb`; the spec's "notebook 3.0" is `4_baselines.ipynb` and "4.0" will be `5_tuning_final.ipynb`). Ask the user before renaming them.
+- The notebook names `1_data-explore.ipynb` and `3_feature_engg.ipynb` differ from the spec's convention (`N.0-jg-<topic>.ipynb`; the spec's "notebook 3.0" is `4_baselines.ipynb` and "4.0" is `5_tuning_final.ipynb`). Ask the user before renaming them.
 - `.claude/skills/churn-tutor/` is a user-invoked tutor skill (Socratic hints, business focus; no interview quizzes unless asked).
 - Update this section as phases are completed.
 
@@ -46,11 +53,12 @@ Telco customer churn prediction: a portfolio project for data science interviews
 
 ## Stack & commands
 - Python **3.12** managed with **uv**, pinned in `.python-version` (the system Python is 3.14; don't use it, since xgboost/shap wheels lag). Run everything via `uv run ...`; add deps with `uv add` (runtime) or `uv add --dev`.
-- Commands (the modules are stubs until their phase is built):
+- Commands:
   - `uv sync` installs dependencies and `churn` in editable mode
   - `uv run python -m churn.dataset` builds cleaned data
-  - `uv run python -m churn.modeling.train` tunes, fits and saves `models/churn_model.joblib` + `models/metadata.json`
-  - `uv run pytest` / `uv run ruff check .`
+  - `uv run python -m churn.modeling.train` tunes, selects, fits and saves `models/churn_model.joblib` + `models/metadata.json` + `reports/model_comparison.md` (≈3–4 min; `--n-trials 5` for a quick run)
+  - `uv run python -m churn.modeling.predict [--input csv] [--output csv]` scores customers with the saved model
+  - `uv run pytest` (no tests yet) / `uv run ruff check churn/`
   - `uv run streamlit run app/streamlit_app.py`
   - `docker build -t churn-app . && docker run -p 8080:8080 churn-app`
 - Windows machine: shell is PowerShell/Git Bash; `make` may be missing, so keep Makefile targets as thin wrappers that also document the `uv run` equivalent.

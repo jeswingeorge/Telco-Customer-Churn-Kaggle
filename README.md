@@ -23,8 +23,10 @@ Each row represents a customer, each column contains customer’s attributes des
 | 2. Data cleaning (`notebooks/1_data-explore.ipynb`, `churn/dataset.py`) | ✅ Done: univariate analysis, cleaning script, [data dictionary](references/data_dictionary.md) |
 | 3. EDA (`notebooks/2_bi_multivariate_analysis.ipynb`) | ✅ Done: feature decisions and 7 business insights (figures saved after modelling) |
 | 4. Feature engineering (`notebooks/3_feature_engg.ipynb`, `churn/features.py`) | ✅ Done: 3 engineered features and the preprocessing `ColumnTransformer` |
-| 5. Modelling · 6. SHAP | ⬜ Not started |
-| 7. Streamlit app · 8. Docker · 9. Cloud Run | ⬜ Not started |
+| 5. Modelling (`notebooks/4_baselines.ipynb`, `notebooks/5_tuning_final.ipynb`, `churn/modeling/`) | ✅ Done: baselines, feature ablation, Optuna tuning, threshold, model choice, saved model |
+| 6. SHAP explainability | ⏸ Deferred |
+| 7. Streamlit app · 8. Docker · 9. Cloud Run | ⏳ Next |
+| Tests (pytest) | ⏸ Deferred |
 
 ## Data findings so far
 - **Imbalanced target:** 73% stayed, 27% churned, so accuracy is misleading and the project reports Precision, Recall, F1, ROC-AUC and PR-AUC.
@@ -71,16 +73,39 @@ All preprocessing lives in `churn/features.py` and runs **inside the sklearn Pip
 | Feature | Rule | Why |
 |---|---|---|
 | `tenure_group` | bands 0–6 / 7–12 / 13–24 / 25–48 / 49–72 months (fixed edges) | captures the steep first-6-months kink (52.9% → 35.9% churn) that raw `tenure` misses in Logistic Regression |
-| `num_services` | count of the 5 add-on services | churn falls from 54.9% (internet customers, 0 add-ons) to 5.3% (all 5) |
-| `has_family` | has a partner or dependents | both lower churn; kept as a candidate to test |
+| `num_services` | count of the 5 add-on services | churn falls from 54.9% (internet customers, 0 add-ons) to 5.3% (all 5); **not used** in the final model (see below) |
+| `has_family` | has a partner or dependents | both lower churn; **not used** in the final model (see below) |
 
 - **Tenure is limited to 0–72 months**, the dataset's range; the app enforces it rather than extrapolating beyond the training data.
 - **A pitfall in the count:** customers without internet also have 0 add-ons but churn at only 7.4%, which hides the 54.9% of internet customers with none. The `InternetService` column separates the two groups in the model.
 - **Preprocessing per model family** (`build_preprocessor`): Logistic Regression gets standardised numerics and one-hot categoricals with one column per Yes/No feature (`drop="if_binary"`, avoids the dummy-variable trap); tree models get raw numerics and full one-hot columns. Excluded columns (`config.DROP_COLS`) are dropped by the transformer.
-- Which engineered features stay (and count vs the 5 add-on binaries for Logistic Regression) is decided with cross-validation in the baseline phase.
+- **Final feature set (decided by a cross-validated ablation):** `tenure`, `MonthlyCharges` and 14 categoricals including `tenure_group` (29 model columns for Logistic Regression). Removing `tenure_group` was the only change that clearly hurt (−0.003 ROC-AUC). `num_services` and `has_family` added nothing over the columns they are built from, so they were removed. Adding `TotalCharges` or the other dropped columns back gave no gain, which confirms the EDA decisions.
 
 ## Results
-_To be filled in after model selection._
+Full details: [reports/model_comparison.md](reports/model_comparison.md) and `notebooks/5_tuning_final.ipynb`.
+
+**Process (no leakage):** stratified 80/20 split; every preprocessing step sits inside an sklearn `Pipeline` fitted on training folds only; models compared with 5-fold stratified cross-validation; the test set was used **once**, at the end.
+
+| Model (tuned with Optuna, CV on train) | ROC-AUC | PR-AUC | Brier |
+|---|---|---|---|
+| Baseline: always "no churn" | 0.500 | 0.265 | — |
+| Decision tree | 0.829 | 0.625 | 0.141 |
+| XGBoost | 0.850 | 0.671 | 0.133 |
+| **Logistic Regression (elastic-net), chosen** | **0.848** | **0.665** | **0.134** |
+
+**Why Logistic Regression, although XGBoost scored slightly higher:** on 15 paired folds XGBoost was ahead by only +0.0013 ROC-AUC. At the chosen operating point that is about 12 fewer wasted offers per 2,000 customers contacted, far below the 0.01 AUC I'd need to give up interpretability. The churn signal is mostly additive (see the EDA), so the linear model loses almost nothing. Its coefficients can be read directly as odds ratios, its probabilities are well calibrated, and it trains 14× faster.
+
+**Threshold 0.307, not 0.5:** chosen on out-of-fold predictions as the best precision with **recall ≥ 75%**. Missing a churner (lost revenue, ~$74/month) costs far more than an unnecessary retention offer. Class weighting was tested and rejected: it gave the same precision and recall as moving the threshold, but distorted the probabilities. F2 was rejected because it flags half of all customers, and the extra contacts churn at only the base rate.
+
+**Test set (1,409 customers, evaluated once):**
+
+| ROC-AUC | PR-AUC | Precision | Recall | Customers flagged |
+|---|---|---|---|---|
+| 0.846 | 0.651 | 0.547 | 0.765 | 37% |
+
+The test results are in line with cross-validation (ROC-AUC 0.848), so the estimate holds. The model catches 286 of 374 churners; 237 offers go to customers who would have stayed.
+
+**What drives churn (model odds ratios):** month-to-month contract 2.0 vs two-year 0.55 (≈3.7× the odds), first 6 months of tenure 1.7, fibre optic 1.6, electronic check 1.4; online security (0.66) and tech support (0.70) go with staying. These match the EDA findings.
 
 ## Live app
 _To be filled in after deploying to Cloud Run._
@@ -88,11 +113,11 @@ _To be filled in after deploying to Cloud Run._
 ## Project organization
 ```
 ├── data/{raw,interim,processed,external}   <- git-ignored; raw CSV goes in data/raw/
-├── models/          <- trained pipeline + metadata
-├── notebooks/       <- 1_data-explore.ipynb (cleaning + univariate), 2_bi_multivariate_analysis.ipynb (EDA), 3_feature_engg.ipynb (feature engineering); later N.0-jg-<topic>.ipynb
+├── models/          <- churn_model.joblib (full pipeline) + metadata.json (threshold, metrics, versions)
+├── notebooks/       <- 1_data-explore (cleaning + univariate), 2_bi_multivariate_analysis (EDA), 3_feature_engg, 4_baselines (baselines + feature ablation), 5_tuning_final (tuning, threshold, model choice, final fit)
 ├── references/      <- data dictionary and other reference material
-├── reports/figures/ <- generated plots
-├── churn/           <- source package (config, dataset, features, evaluate, plots, modeling/)
+├── reports/         <- model_comparison.md + figures/
+├── churn/           <- source package: config, dataset, features, stats, evaluate, modeling/{train,predict}
 ├── app/             <- Streamlit app
 ├── tests/
 └── docs/
@@ -102,7 +127,9 @@ _To be filled in after deploying to Cloud Run._
 ```bash
 uv sync                      # Python 3.12 env + editable install of the churn package
 uv run python -m churn.dataset   # raw CSV -> data/processed/telco_churn_clean.parquet
+uv run python -m churn.modeling.train     # tune, select, fit, test once; saves models/ + reports/ (~3-4 min)
+uv run python -m churn.modeling.predict   # score customers with the saved model (--input/--output CSV)
 uv run jupyter lab           # open the notebooks
 ```
 The raw CSV is not committed: download it from Kaggle into `data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv`.
-_More commands to be added as the pipeline is built._
+_App, Docker and Cloud Run commands will be added in the next phases._

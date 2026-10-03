@@ -3,11 +3,11 @@
 ## Context
 You need an end-to-end churn project to show interviewers: clean structure (Cookiecutter Data Science v2), careful data work, a comparison of several models judged on metrics that suit imbalanced data (Precision, Recall, ROC-AUC, not plain accuracy), and a deployed app (Streamlit → Docker → GCP Cloud Run). The finished repo should show *judgement*: no leakage, a reasoned choice of threshold, results you can explain, and a working public URL.
 
-**Status (2026-10-03):** Phases 1 (scaffolding), 2 (cleaning), 3 (EDA) and 4 (feature engineering) are done; Phase 5 is in progress (baselines and the feature-set ablation done in `notebooks/4_baselines.ipynb`). `uv run python -m churn.dataset` builds `data/processed/telco_churn_clean.parquet` (`config.CLEAN_DATA_FILE`), the modelling input. Notebook `1_data-explore.ipynb` does the univariate pass and the `TotalCharges` fix and writes `data/interim/telco_customer_churn_interim.parquet`; notebook `2_bi_multivariate_analysis.ipynb` holds the EDA, the tenure log-odds conclusion and 7 business insights; `references/data_dictionary.md` is written; feature drops are in `config.DROP_COLS`; notebook `3_feature_engg.ipynb` builds and checks the engineered features, and `churn/features.py` holds `collapse_no_internet`, `add_features` and `build_preprocessor`. **Next:** Optuna tuning, threshold and final model (notebook `5_tuning_final.ipynb`, the spec's 4.0). Figures go to `reports/figures/` after modelling (user's decision). `docker` and `gcloud` are **not** installed yet.
+**Status (2026-10-03):** Phases 1–5 are **done** (scaffolding, cleaning, EDA, feature engineering, modelling). Notebooks: `1_data-explore.ipynb` (univariate + `TotalCharges` fix), `2_bi_multivariate_analysis.ipynb` (EDA, 7 business insights), `3_feature_engg.ipynb`, `4_baselines.ipynb` (the spec's 3.0: baselines + feature ablation), `5_tuning_final.ipynb` (the spec's 4.0: Optuna, threshold, model choice, final fit). Package: `churn.dataset` (raw CSV → `data/processed/telco_churn_clean.parquet`), `churn.features`, `churn.evaluate`, `churn.modeling.train` (tunes, selects, fits, saves) and `churn.modeling.predict` (loads the artifact, validates, scores). **Final model:** unweighted elastic-net Logistic Regression, threshold 0.307; test ROC-AUC 0.846, PR-AUC 0.651, recall 0.765, precision 0.547. `models/churn_model.joblib` + `models/metadata.json` and `reports/model_comparison.md` are generated. **Deferred by the user (2026-10-03):** the pytest suite (section 11) and Phase 7 SHAP (section 6). **Next:** Streamlit app (section 7) → Docker (section 8) → Cloud Run (section 9). `docker` and `gcloud` are **not** installed yet.
 
 **Tutor skill:** `.claude/skills/churn-tutor/SKILL.md` (user-invoked only) runs Socratic tutoring phase by phase (no interview quizzes unless asked).
 
-**Decisions made:** uv + Python 3.12 · notebooks narrate, a reusable `churn` package does the work · extras: hyperparameter tuning (Optuna) + SHAP explainability · cleaned data saved as parquet (`.parquet`, via `pyarrow`; briefly Excel on 2026-09-30, switched back 2026-10-01 because parquet keeps dtypes) · `TotalCharges` is excluded from the model features (decided 2026-10-02, see section 3).
+**Decisions made:** uv + Python 3.12 · notebooks narrate, a reusable `churn` package does the work · extras: hyperparameter tuning (Optuna) + SHAP explainability (SHAP deferred on 2026-10-03; the app goes first) · cleaned data saved as parquet (`.parquet`, via `pyarrow`; briefly Excel on 2026-09-30, switched back 2026-10-01 because parquet keeps dtypes) · `TotalCharges` is excluded from the model features (decided 2026-10-02, see section 3).
 
 ---
 
@@ -105,22 +105,32 @@ Known quirks to handle and *document in the notebook*:
   - `-has_family`: +0.0004 / −0.0000 → **removed**.
   - `num_services` vs the 5 add-on binaries: binaries only = identical to both for LR (exact sum); count only −0.0007 / −0.0021; XGB best with binaries only (+0.0023 / +0.0075) → **`num_services` removed**; the binaries are also more actionable in SHAP.
   - **Decision (2026-10-03): final features** `NUM_COLS = [tenure, MonthlyCharges]`, `CAT_COLS` = 14 (the Phase 4 list minus `has_family`) → LR 29 / tree 38 columns. Final set CV: LR 0.8478 / 0.6635, XGB balanced 0.8237 / 0.6245. `add_features` still builds all three columns; the unused two are dropped by `remainder="drop"`.
-- **Final:** refit the winning pipeline on the full train set → evaluate once on test → save `models/churn_model.joblib` (pipeline) + `models/metadata.json` (model name, threshold, test metrics, feature list, training date, library versions). Write `reports/model_comparison.md` with the CV + test table and the ROC/PR curves.
+- ✅ **Tuning, threshold and model choice (2026-10-03)** in `notebooks/5_tuning_final.ipynb` (steps 6–8):
+  - Optuna (TPE, seed 42; 50/50/100 trials), tuned CV ROC-AUC: LR 0.8483 (baseline 0.8478), DT 0.8327, **XGB 0.8507** (baseline 0.8237; best params are strongly regularised: depth 2, lr 0.016, 750 trees, subsample/colsample ≈ 0.6, reg_lambda 7.9). LR best: `C ≈ 0.069`, `l1_ratio ≈ 0.23` (8 of 29 coefficients exactly 0).
+  - Threshold (OOF, `cross_val_predict`): balanced and unweighted give the same precision/recall at their own thresholds; balancing only shifts the threshold (0.31 → 0.55) and worsens Brier (0.134 → 0.163) → **train unweighted, handle imbalance with the threshold**. Rule: **best precision with recall ≥ 0.75** (LR: threshold ≈ 0.307, precision 0.551, flags 36% of customers). F2 rejected: it flags 50% for ~193 extra churners at a marginal precision of ~26% (= base rate).
+  - Selection (15 fresh paired folds, `RepeatedStratifiedKFold(5, 3, random_state=7)`): XGB − LR = +0.0013 ROC-AUC (11/15 folds), +0.0068 PR-AUC (14/15), +0.006 precision at recall ≥ 0.75 (≈12 fewer wasted offers per 2,000 contacts). Consistent but far below the practical bar (≥0.01 AUC or ≥0.02 precision).
+  - **Decision (2026-10-03): final model = unweighted elastic-net LR** (`solver="saga"`), threshold ≈ 0.307; reported openly that XGB was within 0.0013 AUC. Reasons: interpretability (coefficients = log-odds effects), simplicity, 14× faster fit, cheap exact SHAP.
+  - Note: `saga` shuffles data, so set `random_state` on the final `LogisticRegression` for a reproducible artifact.
+- ✅ **Final (2026-10-03):** refit the winning pipeline on the full train set → evaluate once on test → save `models/churn_model.joblib` (pipeline) + `models/metadata.json` (model name, threshold, test metrics, feature list, training date, library versions). Write `reports/model_comparison.md` with the CV + test table and the ROC/PR curves.
+  - Test (1,409 customers, evaluated once): ROC-AUC 0.846, PR-AUC 0.651, precision 0.547, recall 0.765, 37% flagged (CV/OOF: 0.848 / 0.662 / 0.551 / 0.751). Confusion matrix: TN 798, FP 237, FN 88, TP 286. Strongest effects (odds ratios): month-to-month contract 2.01 vs two-year 0.55, `tenure_group` 0–6 1.74, fibre optic 1.59, online security 0.66, tech support 0.70.
+  - Built as code: `uv run python -m churn.modeling.train` (≈3–4 min; `--n-trials N` for a quick run) reproduces the notebook's parameters, threshold and test metrics. `churn/evaluate.py` holds the metric/threshold/plot helpers.
+  - `churn/modeling/predict.py`: `load_model()` (cached; warns on a scikit-learn version mismatch), `validate()`, `predict(df)`, `predict_one(dict)`. Rows with tenure outside 0–72, missing/non-numeric numbers or category levels the fitted encoder never saw are returned as "Not scored" with a reason. Accepts the raw Kaggle format (SeniorCitizen 0/1) and the cleaned one. CLI: `uv run python -m churn.modeling.predict [--input csv] [--output csv]`.
 
-## 6. Explainability (notebook 5.0)
+## 6. Explainability (notebook 5.0) — deferred (user's decision, 2026-10-03)
 - SHAP (`TreeExplainer` for XGB/DT, `LinearExplainer` for LR) on the transformed test set: summary/beeswarm plot, top-feature bar chart, and 2–3 waterfall plots for individual customers.
 - Compare the SHAP results with the EDA insights (they should agree).
 
 ## 7. Streamlit app (`app/streamlit_app.py`)
 - Loads the artifact + metadata once (`@st.cache_resource`).
-- **Single customer:** sidebar form with all raw input fields → churn probability, a risk label based on the saved threshold, and a SHAP waterfall showing the top reasons.
+- Uses `churn.modeling.predict` (`load_model`, `predict_one`, `predict`) for all scoring; the form fields come from `metadata.json → input_columns`.
+- **Single customer:** sidebar form with all raw input fields → churn probability, a risk label based on the saved threshold, and the top reasons. SHAP is deferred; for the linear model, per-feature contributions (coefficient × transformed value) can show the reasons instead (decide when building the app).
 - **`tenure` is limited to 0–72 months** (the dataset's range; decision 2026-10-02, see section 4): the form input has `min_value=0, max_value=72`.
 - **Batch:** upload a CSV → table of scores, downloadable CSV. Rows with `tenure` outside 0–72 are flagged and not scored.
 - **About tab:** metrics table and model card taken from `metadata.json`.
 - The feature engineering lives in the saved pipeline (or in `churn.features`, imported), so the app and training transform data the same way.
 
 ## 8. Docker (`Dockerfile`)
-- `python:3.12-slim`; install only the runtime deps with `uv sync --frozen --no-dev`; copy `churn/`, `app/`, `models/`.
+- `python:3.12-slim`; install only the runtime deps with `uv sync --frozen --no-dev`; copy `churn/`, `app/`, `models/`. The app must not import `churn.modeling.train` (Optuna is a dev dependency).
 - Run as a non-root user; `CMD streamlit run app/streamlit_app.py --server.port=${PORT:-8080} --server.address=0.0.0.0 --server.headless=true`.
 - `.dockerignore`: data/, notebooks/, .venv, reports/, tests/.
 - Local check: `docker build -t churn-app . && docker run -p 8080:8080 churn-app`.
@@ -136,11 +146,11 @@ Prerequisites: install Docker Desktop + Google Cloud SDK; have a GCP project wit
 ## 10. Implementation order
 1. ✅ Scaffold CCDS, `git init`, uv env on 3.12, move raw CSV. (Data dictionary moves to Phase 2.)
 2. ✅ `dataset.py` + notebook 1.0 + data dictionary → 3. ✅ EDA notebook 2.0 (insights written; figures saved after modelling) → 4. ✅ `features.py` (`collapse_no_internet`, `add_features`, `build_preprocessor`; built and checked in `3_feature_engg.ipynb`)
-5. ✅ Baselines + feature ablation (`4_baselines.ipynb`) → 6. Optuna + threshold + final model (4.0, `train.py`) → 7. SHAP (5.0)
-8. Streamlit app → 9. Docker → 10. Cloud Run → 11. README + tests polish.
+5. ✅ Baselines + feature ablation (`4_baselines.ipynb`) → 6. ✅ Optuna + threshold + final model (`5_tuning_final.ipynb`, `train.py`, `evaluate.py`, `predict.py`) → 7. SHAP (5.0): ⏸ deferred
+8. **Next:** Streamlit app → 9. Docker → 10. Cloud Run → 11. README + tests polish (the pytest suite is deferred to here).
 
 ## 11. Verification
-- `uv run pytest`: the cleaning output has no nulls and a numeric TotalCharges (in the interim data; it is not a model feature); the pipeline fits/predicts on a sample; `predict.py` returns probabilities in [0,1] and respects the threshold.
+- `uv run pytest` (deferred, not written yet): the cleaning output has no nulls and a numeric TotalCharges (in the interim data; it is not a model feature); the pipeline fits/predicts on a sample; `predict.py` returns probabilities in [0,1] and respects the threshold.
 - `uv run python -m churn.dataset && uv run python -m churn.modeling.train` rebuilds the artifact from the raw CSV and gives the same metrics (fixed seed).
 - Notebooks run top to bottom (`jupyter nbconvert --execute`).
 - Sanity target: tuned models should reach test ROC-AUC ≈ 0.83–0.85 on this dataset; much higher suggests leakage.
