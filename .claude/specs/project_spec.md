@@ -120,14 +120,16 @@ Known quirks to handle and *document in the notebook*:
 - SHAP (`TreeExplainer` for XGB/DT, `LinearExplainer` for LR) on the transformed test set: summary/beeswarm plot, top-feature bar chart, and 2–3 waterfall plots for individual customers.
 - Compare the SHAP results with the EDA insights (they should agree).
 
-## 7. Streamlit app (`app/streamlit_app.py`)
+## 7. Streamlit app (`app/streamlit_app.py`): ✅ done (2026-10-03)
 - Loads the artifact + metadata once (`@st.cache_resource`).
-- Uses `churn.modeling.predict` (`load_model`, `predict_one`, `predict`) for all scoring; the form fields come from `metadata.json → input_columns`.
-- **Single customer:** sidebar form with all raw input fields → churn probability, a risk label based on the saved threshold, and the top reasons. SHAP is deferred; for the linear model, per-feature contributions (coefficient × transformed value) can show the reasons instead (decide when building the app).
+- Uses `churn.modeling.predict` (`load_model`, `predict_one`, `predict`) for all scoring. The dropdown options come from the fitted `OneHotEncoder`'s categories, so the form can only offer levels the model was trained on.
+- **Single customer:** sidebar inputs for all 15 raw fields → churn probability, a risk label based on the saved threshold, and the top reasons. **No `st.form`** (decision 2026-10-03): the score updates live on every change, and the 5 add-on dropdowns are disabled (forced to "No") when `InternetService == "No"`.
+- **Top reasons (decision 2026-10-03, SHAP still deferred):** for the LR, each feature's push on the log-odds = coefficient × transformed value (`model[:-1].transform`, so no feature logic is duplicated), with one-hot columns summed back to their feature. The top 5 by |push| are shown, hiding features with |push| < 0.01 (elastic-net zeroed some coefficients). Checked: intercept + contributions reproduces `predict_proba` exactly. The helper `top_reasons()` lives in the app, not in `churn/`.
 - **`tenure` is limited to 0–72 months** (the dataset's range; decision 2026-10-02, see section 4): the form input has `min_value=0, max_value=72`.
-- **Batch:** upload a CSV → table of scores, downloadable CSV. Rows with `tenure` outside 0–72 are flagged and not scored.
+- **Batch:** upload a CSV (raw Kaggle format works) → summary metrics, table sorted by risk, downloadable scored CSV, plus a one-row template CSV. Rows with `tenure` outside 0–72, bad numbers or unknown categories are flagged "Not scored" with a `problem` reason; a missing column shows an error.
 - **About tab:** metrics table and model card taken from `metadata.json`.
 - The feature engineering lives in the saved pipeline (or in `churn.features`, imported), so the app and training transform data the same way.
+- Verified with `streamlit.testing.v1.AppTest` (renders without exceptions, re-scores when inputs change, add-ons disabled with no internet), batch scoring on the raw CSV (7,043 scored, bad rows flagged) and a headless server health check (`/_stcore/health` → `ok`).
 
 ## 8. Docker (`Dockerfile`)
 - `python:3.12-slim`; install only the runtime deps with `uv sync --frozen --no-dev`; copy `churn/`, `app/`, `models/`. The app must not import `churn.modeling.train` (Optuna is a dev dependency).
@@ -147,7 +149,7 @@ Prerequisites: install Docker Desktop + Google Cloud SDK; have a GCP project wit
 1. ✅ Scaffold CCDS, `git init`, uv env on 3.12, move raw CSV. (Data dictionary moves to Phase 2.)
 2. ✅ `dataset.py` + notebook 1.0 + data dictionary → 3. ✅ EDA notebook 2.0 (insights written; figures saved after modelling) → 4. ✅ `features.py` (`collapse_no_internet`, `add_features`, `build_preprocessor`; built and checked in `3_feature_engg.ipynb`)
 5. ✅ Baselines + feature ablation (`4_baselines.ipynb`) → 6. ✅ Optuna + threshold + final model (`5_tuning_final.ipynb`, `train.py`, `evaluate.py`, `predict.py`) → 7. SHAP (5.0): ⏸ deferred
-8. **Next:** Streamlit app → 9. Docker → 10. Cloud Run → 11. README + tests polish (the pytest suite is deferred to here).
+8. ✅ Streamlit app (`app/streamlit_app.py`) → 9. **Next:** Docker → 10. Cloud Run → 11. README + tests polish (the pytest suite is deferred to here).
 
 ## 11. Verification
 - `uv run pytest` (deferred, not written yet): the cleaning output has no nulls and a numeric TotalCharges (in the interim data; it is not a model feature); the pipeline fits/predicts on a sample; `predict.py` returns probabilities in [0,1] and respects the threshold.

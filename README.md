@@ -25,7 +25,8 @@ Each row represents a customer, each column contains customer’s attributes des
 | 4. Feature engineering (`notebooks/3_feature_engg.ipynb`, `churn/features.py`) | ✅ Done: 3 engineered features and the preprocessing `ColumnTransformer` |
 | 5. Modelling (`notebooks/4_baselines.ipynb`, `notebooks/5_tuning_final.ipynb`, `churn/modeling/`) | ✅ Done: baselines, feature ablation, Optuna tuning, threshold, model choice, saved model |
 | 6. SHAP explainability | ⏸ Deferred |
-| 7. Streamlit app · 8. Docker · 9. Cloud Run | ⏳ Next |
+| 7. Streamlit app (`app/streamlit_app.py`) | ✅ Done: single-customer scoring with reasons, batch CSV scoring, model card |
+| 8. Docker · 9. Cloud Run | ⏳ Next |
 | Tests (pytest) | ⏸ Deferred |
 
 ## Data findings so far
@@ -107,6 +108,14 @@ The test results are in line with cross-validation (ROC-AUC 0.848), so the estim
 
 **What drives churn (model odds ratios):** month-to-month contract 2.0 vs two-year 0.55 (≈3.7× the odds), first 6 months of tenure 1.7, fibre optic 1.6, electronic check 1.4; online security (0.66) and tech support (0.70) go with staying. These match the EDA findings.
 
+## Streamlit app
+`uv run streamlit run app/streamlit_app.py`, then open http://localhost:8501.
+- **Single customer:** fill in the sidebar; the churn probability and risk label (threshold 0.307) update live. A "Why this score?" table shows the top features pushing this customer's log-odds up or down (logistic-regression coefficient × scaled/one-hot value; associations, not causes).
+- **Batch scoring:** upload a CSV (the raw Kaggle file works) and download it with `churn_probability`, `risk_label` and a `problem` column. Rows the model wasn't trained for (tenure outside 0-72, unknown categories) are flagged "Not scored" instead of getting a misleading score.
+- **About the model:** model card and CV vs test metrics, read from `models/metadata.json`.
+
+The app scores only through `churn.modeling.predict` and the saved pipeline, so it can't drift from training.
+
 ## Live app
 _To be filled in after deploying to Cloud Run._
 
@@ -129,7 +138,8 @@ uv sync                      # Python 3.12 env + editable install of the churn p
 uv run python -m churn.dataset   # raw CSV -> data/processed/telco_churn_clean.parquet
 uv run python -m churn.modeling.train     # tune, select, fit, test once; saves models/ + reports/ (~3-4 min)
 uv run python -m churn.modeling.predict   # score customers with the saved model (--input/--output CSV)
+uv run streamlit run app/streamlit_app.py   # the app at http://localhost:8501
 uv run jupyter lab           # open the notebooks
 ```
 The raw CSV is not committed: download it from Kaggle into `data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv`.
-_App, Docker and Cloud Run commands will be added in the next phases._
+_Docker and Cloud Run commands will be added in the next phases._
