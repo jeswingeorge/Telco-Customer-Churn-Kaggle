@@ -1,0 +1,31 @@
+# Files `gcloud builds submit` should NOT upload to Cloud Build.
+# Same idea as .dockerignore (which gcloud doesn't read); keep the two lists in sync.
+# Only what the Dockerfile COPYs is needed: pyproject.toml, uv.lock, .python-version,
+# Dockerfile, churn/, app/, models/.
+
+.gcloudignore
+.gitignore
+
+# Your Windows virtual environment: useless in Linux; the image builds its own .venv
+.venv/
+
+# Not needed to run the app (the model is already trained and saved in models/)
+data/
+notebooks/
+reports/
+references/
+tests/
+docs/
+archive.zip
+interview_prep.md
+README.md
+CLAUDE.md
+
+# Tooling, caches and git history
+.git/
+.claude/
+.ruff_cache/
+.pytest_cache/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/

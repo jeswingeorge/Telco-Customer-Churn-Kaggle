@@ -3,7 +3,7 @@
 ## Context
 You need an end-to-end churn project to show interviewers: clean structure (Cookiecutter Data Science v2), careful data work, a comparison of several models judged on metrics that suit imbalanced data (Precision, Recall, ROC-AUC, not plain accuracy), and a deployed app (Streamlit → Docker → GCP Cloud Run). The finished repo should show *judgement*: no leakage, a reasoned choice of threshold, results you can explain, and a working public URL.
 
-**Status (2026-10-03):** Phases 1–5 are **done** (scaffolding, cleaning, EDA, feature engineering, modelling). Notebooks: `1_data-explore.ipynb` (univariate + `TotalCharges` fix), `2_bi_multivariate_analysis.ipynb` (EDA, 7 business insights), `3_feature_engg.ipynb`, `4_baselines.ipynb` (the spec's 3.0: baselines + feature ablation), `5_tuning_final.ipynb` (the spec's 4.0: Optuna, threshold, model choice, final fit). Package: `churn.dataset` (raw CSV → `data/processed/telco_churn_clean.parquet`), `churn.features`, `churn.evaluate`, `churn.modeling.train` (tunes, selects, fits, saves) and `churn.modeling.predict` (loads the artifact, validates, scores). **Final model:** unweighted elastic-net Logistic Regression, threshold 0.307; test ROC-AUC 0.846, PR-AUC 0.651, recall 0.765, precision 0.547. `models/churn_model.joblib` + `models/metadata.json` and `reports/model_comparison.md` are generated. **Deferred by the user (2026-10-03):** the pytest suite (section 11) and Phase 7 SHAP (section 6). Streamlit app (section 7) and Docker (section 8) are **done** (2026-10-03). **Next:** Cloud Run (section 9). Docker Desktop is installed; `gcloud` is **not** installed yet.
+**Status (2026-10-03):** Phases 1–5 are **done** (scaffolding, cleaning, EDA, feature engineering, modelling). Notebooks: `1_data-explore.ipynb` (univariate + `TotalCharges` fix), `2_bi_multivariate_analysis.ipynb` (EDA, 7 business insights), `3_feature_engg.ipynb`, `4_baselines.ipynb` (the spec's 3.0: baselines + feature ablation), `5_tuning_final.ipynb` (the spec's 4.0: Optuna, threshold, model choice, final fit). Package: `churn.dataset` (raw CSV → `data/processed/telco_churn_clean.parquet`), `churn.features`, `churn.evaluate`, `churn.modeling.train` (tunes, selects, fits, saves) and `churn.modeling.predict` (loads the artifact, validates, scores). **Final model:** unweighted elastic-net Logistic Regression, threshold 0.307; test ROC-AUC 0.846, PR-AUC 0.651, recall 0.765, precision 0.547. `models/churn_model.joblib` + `models/metadata.json` and `reports/model_comparison.md` are generated. **Deferred by the user (2026-10-03):** the pytest suite (section 11) and Phase 7 SHAP (section 6). Streamlit app (section 7), Docker (section 8) and Cloud Run (section 9) are **done** (2026-10-03); live at https://churn-app-1012735950104.asia-south1.run.app. **Next:** README polish (screenshot) and the deferred tests/SHAP if the user wants them.
 
 **Tutor skill:** `.claude/skills/churn-tutor/SKILL.md` (user-invoked only) runs Socratic tutoring phase by phase (no interview quizzes unless asked).
 
@@ -138,26 +138,30 @@ Known quirks to handle and *document in the notebook*:
 - `.dockerignore`: .venv, data/, notebooks/, reports/, references/, tests/, docs/, archive.zip, interview_prep.md, .git, .claude, caches.
 - Local check: `docker build -t churn-app .` then `docker run --rm -p 8080:8080 churn-app` → http://localhost:8080.
 
-## 9. GCP Cloud Run deployment
-Prerequisites: install Docker Desktop + Google Cloud SDK; have a GCP project with billing enabled.
+## 9. GCP Cloud Run deployment: ✅ done (2026-10-03)
+**Live:** https://churn-app-1012735950104.asia-south1.run.app (revision `churn-app-00001-6q4`). Project `project-ddf6c9f3-f5d6-49e3-bb0` (number 1012735950104), region `asia-south1` (Mumbai, set as `run/region`), billing enabled.
 1. `gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com`
-2. `gcloud artifacts repositories create churn-repo --repository-format=docker --location=<region>`
-3. `gcloud builds submit --tag <region>-docker.pkg.dev/<project>/churn-repo/churn-app:v1`
-4. `gcloud run deploy churn-app --image <...>:v1 --region <region> --allow-unauthenticated --memory 1Gi --min-instances 0 --max-instances 2`
-- Put the live URL and a screenshot in the README. min-instances 0 keeps it within the free tier; mention the cold start in the README.
+2. `gcloud artifacts repositories create churn-repo --repository-format=docker --location=asia-south1`
+3. One-time IAM fix: new projects no longer give the Compute Engine default service account (which Cloud Build runs as) Editor, so the first build failed with `storage.objects.get` denied. Fix: `gcloud projects add-iam-policy-binding <project> --member="serviceAccount:<project-number>-compute@developer.gserviceaccount.com" --role="roles/cloudbuild.builds.builder"` (read source, write logs, push to Artifact Registry).
+4. `gcloud builds submit` builds with **`cloudbuild.yaml`** (user's choice over a long `--tag`; one `docker build` step + `images:` push; substitutions `_REGION=asia-south1`, `_TAG=v1`, `$PROJECT_ID` built in; timeout 1200s). New version: `gcloud builds submit --substitutions=_TAG=v2`. Uploads are filtered by **`.gcloudignore`** (gcloud ignores `.dockerignore`): only the ~20 files the Dockerfile needs.
+5. `gcloud run deploy churn-app --image asia-south1-docker.pkg.dev/<project>/churn-repo/churn-app:v1 --region asia-south1 --allow-unauthenticated --memory 1Gi --min-instances 0 --max-instances 2 --session-affinity --timeout 3600`
+   - `--session-affinity`: Streamlit keeps each session in one container's memory; without it a CSV upload can hit the other instance and fail.
+   - `--timeout 3600`: Streamlit holds a WebSocket open; the 300 s default would force reconnects.
+   - min-instances 0 = scale to zero (no cost when idle, cold start of a few seconds); max 2 caps cost. Startup CPU boost is on by default.
+- Verified: `/_stcore/health` returns `ok` on the live URL; settings confirmed with `gcloud run services describe`. Still to do: a README screenshot, and the user's same-customer check (about 80% High risk, see section 11).
 
 ## 10. Implementation order
 1. ✅ Scaffold CCDS, `git init`, uv env on 3.12, move raw CSV. (Data dictionary moves to Phase 2.)
 2. ✅ `dataset.py` + notebook 1.0 + data dictionary → 3. ✅ EDA notebook 2.0 (insights written; figures saved after modelling) → 4. ✅ `features.py` (`collapse_no_internet`, `add_features`, `build_preprocessor`; built and checked in `3_feature_engg.ipynb`)
 5. ✅ Baselines + feature ablation (`4_baselines.ipynb`) → 6. ✅ Optuna + threshold + final model (`5_tuning_final.ipynb`, `train.py`, `evaluate.py`, `predict.py`) → 7. SHAP (5.0): ⏸ deferred
-8. ✅ Streamlit app (`app/streamlit_app.py`) → 9. ✅ Docker → 10. **Next:** Cloud Run → 11. README + tests polish (the pytest suite is deferred to here).
+8. ✅ Streamlit app (`app/streamlit_app.py`) → 9. ✅ Docker → 10. ✅ Cloud Run → 11. **Next:** README + tests polish (the pytest suite is deferred to here).
 
 ## 11. Verification
 - `uv run pytest` (deferred, not written yet): the cleaning output has no nulls and a numeric TotalCharges (in the interim data; it is not a model feature); the pipeline fits/predicts on a sample; `predict.py` returns probabilities in [0,1] and respects the threshold.
 - `uv run python -m churn.dataset && uv run python -m churn.modeling.train` rebuilds the artifact from the raw CSV and gives the same metrics (fixed seed).
 - Notebooks run top to bottom (`jupyter nbconvert --execute`).
 - Sanity target: tuned models should reach test ROC-AUC ≈ 0.83–0.85 on this dataset; much higher suggests leakage.
-- `uv run streamlit run app/streamlit_app.py` works locally → the same in `docker run` → the Cloud Run URL gives the same prediction for the same test customer.
+- `uv run streamlit run app/streamlit_app.py` works locally → the same in `docker run` → the Cloud Run URL gives the same prediction for the same test customer (tenure 2, MonthlyCharges 90, Month-to-month, Fiber optic, Electronic check, PaperlessBilling Yes, all else No → P(churn) ≈ 0.80, High risk).
 
 ## Interview talking points to capture in the README
 Why not accuracy · how leakage was prevented · how the threshold was chosen · LR vs XGB trade-off · top churn drivers (from SHAP) · what I would do next (cost-sensitive threshold using customer value, monitoring for drift, retraining).

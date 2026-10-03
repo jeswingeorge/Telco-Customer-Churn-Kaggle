@@ -35,7 +35,8 @@ Telco customer churn prediction: a portfolio project for data science interviews
 - **Deferred by the user (2026-10-03):** the pytest suite (spec section 11) and Phase 7 SHAP (spec section 6).
 - Streamlit app `app/streamlit_app.py` written by Claude at the user's request (2026-10-03): live sidebar inputs (no `st.form`; dropdown options come from the fitted encoder; add-ons disabled when no internet), 3 tabs (single customer + "why this score" = LR coef × transformed value grouped per feature, batch CSV upload/download, model card from `metadata.json`). Scores only via `churn.modeling.predict`. Checked headless with `streamlit.testing.v1.AppTest`. Phase 7 (Streamlit) is **done**; details in spec section 7.
 - Docker (spec section 8) is **done** (2026-10-03): `Dockerfile` + `.dockerignore` (written by Claude, commented line by line); the user built and ran it and checked http://localhost:8080. Image 1.98 GB (456 MB compressed).
-- **Next:** Cloud Run (spec section 9). The user has never used gcloud or GCP: go one concept at a time with exact commands and expected output (see *Working with the user*). Install the Google Cloud SDK and set up a GCP project with billing first. The app scores only through `churn.modeling.predict`.
+- Cloud Run (spec section 9) is **done** (2026-10-03): live at https://churn-app-1012735950104.asia-south1.run.app. Built with `cloudbuild.yaml` (`gcloud builds submit`; new version `--substitutions=_TAG=v2`), uploads filtered by `.gcloudignore`. The Cloud Build service account needed `roles/cloudbuild.builds.builder` (granted by the user). Exact deploy command and flag reasons are in spec section 9.
+- **Next:** README polish (screenshot of the live app), then the deferred pytest suite / SHAP if the user wants them. The user is new to gcloud/GCP: keep explaining one concept at a time.
 - Before editing `churn/*.py`, check with the user: they prototype logic in the notebook first and usually write the module code themselves from a skeleton (exception: for `evaluate.py`, `train.py` and `predict.py` they asked Claude to write the code directly). Ask the same for the app.
 - `uv run ruff check churn/ app/` must pass before a commit. The user is new to ruff; it was explained as a linter (catches bugs like undefined/unused names, keeps imports and style consistent). The project has no ruff config, so it uses ruff 0.16's defaults (line length 88).
 - The notebook names `1_data-explore.ipynb` and `3_feature_engg.ipynb` differ from the spec's convention (`N.0-jg-<topic>.ipynb`; the spec's "notebook 3.0" is `4_baselines.ipynb` and "4.0" is `5_tuning_final.ipynb`). Ask the user before renaming them.
@@ -63,9 +64,10 @@ Telco customer churn prediction: a portfolio project for data science interviews
   - `uv run pytest` (no tests yet) / `uv run ruff check churn/ app/`
   - `uv run streamlit run app/streamlit_app.py`
   - `docker build -t churn-app .` then `docker run --rm -p 8080:8080 churn-app` (app at http://localhost:8080)
+  - `gcloud builds submit [--substitutions=_TAG=v2]` then `gcloud run deploy churn-app --image asia-south1-docker.pkg.dev/<project>/churn-repo/churn-app:<tag> ...` (full flags in spec section 9)
 - Windows machine: shell is PowerShell/Git Bash; `make` may be missing, so keep Makefile targets as thin wrappers that also document the `uv run` equivalent.
 - Windows Application Control blocks executables run from uv's cache, so `uvx <tool>` fails. Install tools into the project instead (`uv add --dev`) and use `uv run`.
-- Docker Desktop 29.8 is installed and working (2026-10-03). gcloud is not installed yet (needed for Cloud Run).
+- Docker Desktop 29.8 and the Google Cloud SDK (gcloud 587) are installed (2026-10-03). gcloud project `project-ddf6c9f3-f5d6-49e3-bb0`, `run/region = asia-south1`, billing enabled. Creating or changing cloud resources (builds, deploys, IAM) is outward-facing: give the user the command to run; read-only checks (`gcloud run services describe`, health checks) are fine.
 - xgboost, shap and seaborn are **dev** dependencies (2026-10-03), so the Docker image (`uv sync --no-dev`) skips them. Never import them from `app/` or `churn.modeling.predict`.
 
 ## Project conventions

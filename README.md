@@ -27,7 +27,7 @@ Each row represents a customer, each column contains customer’s attributes des
 | 6. SHAP explainability | ⏸ Deferred |
 | 7. Streamlit app (`app/streamlit_app.py`) | ✅ Done: single-customer scoring with reasons, batch CSV scoring, model card |
 | 8. Docker (`Dockerfile`) | ✅ Done: slim Python 3.12 image, runtime deps only, non-root user |
-| 9. Cloud Run | ⏳ Next |
+| 9. Cloud Run | ✅ Done: [live app](https://churn-app-1012735950104.asia-south1.run.app) (Cloud Build + Artifact Registry, scale-to-zero) |
 | Tests (pytest) | ⏸ Deferred |
 
 ## Data findings so far
@@ -118,7 +118,9 @@ The test results are in line with cross-validation (ROC-AUC 0.848), so the estim
 The app scores only through `churn.modeling.predict` and the saved pipeline, so it can't drift from training.
 
 ## Live app
-_To be filled in after deploying to Cloud Run._
+**https://churn-app-1012735950104.asia-south1.run.app**
+
+Hosted on Google Cloud Run with scale-to-zero (`min-instances 0`): it costs nothing while idle, so the **first visit after a quiet period takes a few seconds** (cold start) while a container starts. After that it responds immediately.
 
 ## Project organization
 ```
@@ -150,4 +152,21 @@ docker run --rm -p 8080:8080 churn-app       # then open http://localhost:8080
 ```
 The image installs only the runtime dependencies from `uv.lock` (`uv sync --frozen --no-dev`), so it uses the same library versions the model was trained with. Training-only libraries (xgboost, shap, optuna, jupyter) live in the dev group and stay out of the image, which halves it (4.2 GB → 2.0 GB; 456 MB compressed). It runs as a non-root user and listens on `$PORT` (default 8080), as Cloud Run expects.
 
-_Cloud Run commands will be added in the next phase._
+### Deploying to Google Cloud Run
+One-time setup: a GCP project with billing, the Google Cloud SDK, then:
+```bash
+gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com
+gcloud artifacts repositories create churn-repo --repository-format=docker --location=asia-south1
+```
+Build and deploy:
+```bash
+gcloud builds submit                            # Cloud Build runs cloudbuild.yaml -> churn-app:v1 in Artifact Registry
+gcloud run deploy churn-app \
+  --image asia-south1-docker.pkg.dev/<project-id>/churn-repo/churn-app:v1 \
+  --region asia-south1 --allow-unauthenticated --memory 1Gi \
+  --min-instances 0 --max-instances 2 --session-affinity --timeout 3600
+```
+- The image is built in the cloud from the same `Dockerfile`; `.gcloudignore` uploads only the files it needs (~20 files).
+- `--min-instances 0` scales to zero (no idle cost, short cold start); `--max-instances 2` caps the cost.
+- `--session-affinity` keeps each user on one container, because Streamlit keeps the session (and uploaded CSVs) in memory; `--timeout 3600` lets its WebSocket connection stay open.
+- New version: `gcloud builds submit --substitutions=_TAG=v2`, then deploy `:v2`. Each deploy is a new revision, so you can roll back.

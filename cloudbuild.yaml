@@ -1,0 +1,31 @@
+# Cloud Build recipe: build the Docker image on Google's machines and store it in Artifact Registry.
+# Run from the repo root:
+#   gcloud builds submit                                  # builds churn-app:v1
+#   gcloud builds submit --substitutions=_TAG=v2          # a new version after changing the app
+#
+# gcloud uploads the repo (minus .gcloudignore), then Cloud Build runs the steps below in order.
+
+steps:
+  # Step 1: the same `docker build` you ran locally, using Google's ready-made docker helper image.
+  # -t gives the image its full Artifact Registry address: region / project / repository / name:tag
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/churn-repo/churn-app:${_TAG}
+      - .
+
+# After the steps succeed, push this image to Artifact Registry (and list it in the build results).
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/churn-repo/churn-app:${_TAG}
+
+# Variables with defaults; override with --substitutions=_TAG=v2.
+# $PROJECT_ID is built in: Cloud Build fills in the current gcloud project.
+# (Custom ones must start with an underscore.)
+substitutions:
+  _REGION: asia-south1
+  _TAG: v1
+
+# Stop the build if it takes longer than 20 minutes (the default is 10; the first, uncached build
+# downloads all the Python packages, so leave some headroom).
+timeout: 1200s
