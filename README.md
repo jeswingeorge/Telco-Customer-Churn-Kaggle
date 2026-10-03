@@ -22,7 +22,7 @@ Each row represents a customer, each column contains customer’s attributes des
 | 1. Scaffolding (CCDS v2 layout, uv + Python 3.12, `churn` package) | ✅ Done |
 | 2. Data cleaning (`notebooks/1_data-explore.ipynb`, `churn/dataset.py`) | ✅ Done: univariate analysis, cleaning script, [data dictionary](references/data_dictionary.md) |
 | 3. EDA (`notebooks/2_bi_multivariate_analysis.ipynb`) | ✅ Done: feature decisions and 7 business insights (figures saved after modelling) |
-| 4. Feature engineering (`churn/features.py`, `churn/config.py`) | 🟡 Started: drop list in `config.DROP_COLS`, `collapse_no_internet` transform |
+| 4. Feature engineering (`notebooks/3_feature_engg.ipynb`, `churn/features.py`) | ✅ Done: 3 engineered features and the preprocessing `ColumnTransformer` |
 | 5. Modelling · 6. SHAP | ⬜ Not started |
 | 7. Streamlit app · 8. Docker · 9. Cloud Run | ⬜ Not started |
 
@@ -65,6 +65,20 @@ Churn rate by group, against the 26.5% baseline. Associations, not proof of caus
 - Dropped `StreamingMovies`: adds no churn signal beyond `StreamingTV`. Their apparent overlap (V = 0.77) was inflated by the shared "No internet service" level; among internet customers it is 0.43.
 - **"No internet service"** in five add-on columns is identical to `InternetService == "No"`, which would create six identical one-hot columns. It is collapsed to "No" inside the model pipeline (`churn.features.collapse_no_internet`), so the app applies the same step.
 
+## Feature engineering
+All preprocessing lives in `churn/features.py` and runs **inside the sklearn Pipeline**, so anything that learns from the data (encoders, scalers) is fitted only on training folds (no leakage), and the Streamlit app applies exactly the same steps.
+
+| Feature | Rule | Why |
+|---|---|---|
+| `tenure_group` | bands 0–6 / 7–12 / 13–24 / 25–48 / 49–72 months (fixed edges) | captures the steep first-6-months kink (52.9% → 35.9% churn) that raw `tenure` misses in Logistic Regression |
+| `num_services` | count of the 5 add-on services | churn falls from 54.9% (internet customers, 0 add-ons) to 5.3% (all 5) |
+| `has_family` | has a partner or dependents | both lower churn; kept as a candidate to test |
+
+- **Tenure is limited to 0–72 months**, the dataset's range; the app enforces it rather than extrapolating beyond the training data.
+- **A pitfall in the count:** customers without internet also have 0 add-ons but churn at only 7.4%, which hides the 54.9% of internet customers with none. The `InternetService` column separates the two groups in the model.
+- **Preprocessing per model family** (`build_preprocessor`): Logistic Regression gets standardised numerics and one-hot categoricals with one column per Yes/No feature (`drop="if_binary"`, avoids the dummy-variable trap); tree models get raw numerics and full one-hot columns. Excluded columns (`config.DROP_COLS`) are dropped by the transformer.
+- Which engineered features stay (and count vs the 5 add-on binaries for Logistic Regression) is decided with cross-validation in the baseline phase.
+
 ## Results
 _To be filled in after model selection._
 
@@ -75,7 +89,7 @@ _To be filled in after deploying to Cloud Run._
 ```
 ├── data/{raw,interim,processed,external}   <- git-ignored; raw CSV goes in data/raw/
 ├── models/          <- trained pipeline + metadata
-├── notebooks/       <- 1_data-explore.ipynb (cleaning + univariate), 2_bi_multivariate_analysis.ipynb (EDA); later N.0-jg-<topic>.ipynb
+├── notebooks/       <- 1_data-explore.ipynb (cleaning + univariate), 2_bi_multivariate_analysis.ipynb (EDA), 3_feature_engg.ipynb (feature engineering); later N.0-jg-<topic>.ipynb
 ├── references/      <- data dictionary and other reference material
 ├── reports/figures/ <- generated plots
 ├── churn/           <- source package (config, dataset, features, evaluate, plots, modeling/)

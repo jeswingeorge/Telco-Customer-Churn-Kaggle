@@ -46,3 +46,9 @@ TENURE_LABELS = ["0-6", "7-12", "13-24", "25-48", "49-72"]
 ADDON_COLS = NO_INTERNET_COLS
 
 ENGINEERED_FEATURES = ["tenure_group", "num_services", "has_family"]
+
+# ---- Model feature lists (used by churn.features.build_preprocessor) ----
+# Everything not listed here (DROP_COLS, the target) is dropped by remainder="drop".
+NUM_COLS = ["tenure", "MonthlyCharges", "num_services"]
+CAT_COLS = ['SeniorCitizen', 'Partner', 'Dependents', 'MultipleLines', 'InternetService', 'OnlineSecurity', 'OnlineBackup', 'DeviceProtection', 'TechSupport', 'StreamingTV', 'Contract', 'PaperlessBilling', 'PaymentMethod', 'tenure_group', 'has_family']
+

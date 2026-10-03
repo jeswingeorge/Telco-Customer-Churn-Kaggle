@@ -19,8 +19,15 @@ Telco customer churn prediction: a portfolio project for data science interviews
   - Model-excluded columns and their reasons live in `churn.config.DROP_COLS` (customerID, TotalCharges, gender, PhoneService, StreamingMovies); they stay in the cleaned data and the pipeline doesn't select them.
   - `churn.features.collapse_no_internet` (a Pipeline step) maps "No internet service" → "No" in `config.NO_INTERNET_COLS`. The EDA notebook applies the same replace to its own `df`, so the function isn't used there.
   - EDA findings feeding Phase 4: a count of add-on services is strong (churn 55% with 0 → 5% with 5 among internet customers) but is an exact sum of the 5 binaries, so for LR use one or the other; `has_family` would lose information; keep all 4 `PaymentMethod` levels.
-- **Next:** `build_preprocessor` in `churn/features.py` → baselines (notebook 3.0, loading `config.CLEAN_DATA_FILE`).
-- The notebook name `1_data-explore.ipynb` differs from the spec's convention (`1.0-jg-data-cleaning.ipynb`). Ask the user before renaming it.
+- Phase 4 (feature engineering) is **done** (2026-10-03). The user built and checked the features in `notebooks/3_feature_engg.ipynb` first, then moved them into `churn/features.py` themselves from TODO skeletons.
+  - `add_features` (stateless, a Pipeline step after `collapse_no_internet`) always adds `tenure_group` (fixed bins `config.TENURE_BINS`, 0–72 months), `num_services` (count of `"Yes"` over `config.ADDON_COLS` = `NO_INTERNET_COLS`) and `has_family`. Which ones a model uses is decided by the column lists.
+  - `build_preprocessor(model_type, num_cols=None, cat_cols=None)` returns a `ColumnTransformer` (`remainder="drop"`, pandas output). `"lr"`: `StandardScaler` + `OneHotEncoder(drop="if_binary")` → 31 columns. `"tree"`: passthrough + `OneHotEncoder` without `drop` → 41 columns. The defaults are `config.NUM_COLS` / `config.CAT_COLS` (15 categoricals).
+  - **Decision (2026-10-02): `tenure` is limited to 0–72 months** (the dataset's range). The Streamlit form enforces it, and batch rows outside it are flagged, not scored; the bins are not open-ended.
+  - Still to decide with CV in notebook 3.0: with/without `TotalCharges`, `has_family` and `tenure_group`, and for LR `num_services` vs the 5 add-on binaries (an exact sum, so collinear).
+- **Next:** Phase 5, baselines (notebook 3.0): stratified split, Pipeline = `collapse_no_internet` → `add_features` → `build_preprocessor` → model, 5-fold CV. No `train.py` or pipeline-builder function yet.
+- Before editing `churn/*.py`, check with the user: they prototype logic in the notebook first and usually write the module code themselves from a skeleton.
+- `uv run ruff check churn/` must pass before a commit. The user is new to ruff; it was explained as a linter (catches bugs like undefined/unused names, keeps imports and style consistent). The project has no ruff config, so it uses ruff 0.16's defaults (line length 88).
+- The notebook names `1_data-explore.ipynb` and `3_feature_engg.ipynb` differ from the spec's convention (`N.0-jg-<topic>.ipynb`; the spec's "notebook 3.0" means the baselines notebook, which doesn't exist yet). Ask the user before renaming them.
 - `.claude/skills/churn-tutor/` is a user-invoked tutor skill (Socratic hints, business focus; no interview quizzes unless asked).
 - Update this section as phases are completed.
 

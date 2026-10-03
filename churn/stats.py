@@ -1,10 +1,10 @@
 """Association measures between categorical variables, used in the EDA notebooks."""
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from scipy.stats import chi2_contingency, entropy
-import matplotlib.pyplot as plt
 import seaborn as sns
+from scipy.stats import chi2_contingency, entropy
 
 
 def cramers_v(x, y, bias_correction=True, alpha=0.05, verbose=True):
@@ -101,7 +101,6 @@ def cramer_matrix(data, columns, plot=True):
         plt.tight_layout()
         plt.show()
         
-    return
 
 
 def theil_matrix(data, columns, plot=True):
@@ -132,4 +131,3 @@ def theil_matrix(data, columns, plot=True):
         plt.tight_layout()
         plt.show()
         
-    return

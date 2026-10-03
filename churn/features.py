@@ -2,8 +2,17 @@
 
 import numpy as np
 import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from churn.config import ADDON_COLS, NO_INTERNET_COLS, TENURE_BINS, TENURE_LABELS
+from churn.config import (
+    ADDON_COLS,
+    CAT_COLS,
+    NO_INTERNET_COLS,
+    NUM_COLS,
+    TENURE_BINS,
+    TENURE_LABELS,
+)
 
 NO_INTERNET = "No internet service"
 
@@ -71,3 +80,37 @@ def add_features(X: pd.DataFrame) -> pd.DataFrame:
     X = add_has_family(X)
     return X
 
+
+
+def build_preprocessor(model_type: str, num_cols=None, cat_cols=None) -> ColumnTransformer:
+    """Return the ColumnTransformer for a model family: "lr" or "tree".
+
+    Why a ColumnTransformer: encoders/scalers learn their categories, means and stds in
+    fit() only, so inside the Pipeline they see training folds only (no leakage), and the
+    same fitted transform is applied to the test set and to single customers in the app.
+
+    num_cols / cat_cols default to config's lists; the baseline notebook passes other lists
+    to compare feature sets with CV (e.g. without has_family, or count vs add-on binaries).
+    """
+    num_cols = NUM_COLS if num_cols is None else num_cols
+    cat_cols = CAT_COLS if cat_cols is None else cat_cols
+
+    if model_type == "lr":
+        num_step = StandardScaler()   
+        cat_step = OneHotEncoder(handle_unknown="ignore", sparse_output=False, drop="if_binary")   
+    elif model_type == "tree":
+        num_step = "passthrough"  
+        cat_step = OneHotEncoder(handle_unknown="ignore", sparse_output=False)   
+    else:
+        raise ValueError(f"model_type must be 'lr' or 'tree', got {model_type!r}")
+
+    preprocessor = ColumnTransformer(
+        [
+            ("num", num_step, num_cols),
+            ("cat", cat_step, cat_cols),
+        ],
+        remainder="drop",
+    )
+    
+    preprocessor.set_output(transform="pandas")
+    return preprocessor
