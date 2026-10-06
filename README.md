@@ -1,41 +1,17 @@
 # Telco Customer Churn Prediction
 
-Predict which telecom customers are likely to churn, so retention offers can be targeted.
-Dataset: [Kaggle – Telco Customer Churn](https://www.kaggle.com/datasets/blastchar/telco-customer-churn) (7,043 customers, ~26.5% churn).
+Predict which telecom customers are likely to leave, so a retention team can target offers at the right people, and explain *why* they leave.
 
-## Context
-"Predict behavior to retain customers. You can analyze all relevant customer data and develop focused customer retention programs." [IBM Sample Data Sets]
+Dataset: [Kaggle – Telco Customer Churn](https://www.kaggle.com/datasets/blastchar/telco-customer-churn) (IBM sample data): 7,043 customers, 21 columns, **26.5% churn**. Column details are in the [data dictionary](references/data_dictionary.md).
 
-## Content
-Each row represents a customer, each column contains customer’s attributes described on the column Metadata.
+## Live app
+_To be added after deploying to Cloud Run._
 
-**The data set includes information about:**
+## Results
+_To be added after model selection: CV and test metrics, the chosen threshold and why._
 
-- Customers who left within the last month – the column is called Churn
-- Services that each customer has signed up for – phone, multiple lines, internet, online security, online backup, device protection, tech support, and streaming TV and movies
-- Customer account information – how long they’ve been a customer, contract, payment method, paperless billing, monthly charges, and total charges
-- Demographic info about customers – gender, age range, and if they have partners and dependents
-
-## Progress
-| Phase | Status |
-|---|---|
-| 1. Scaffolding (CCDS v2 layout, uv + Python 3.12, `churn` package) | ✅ Done |
-| 2. Data cleaning (`notebooks/1_data-explore.ipynb`, `churn/dataset.py`) | ✅ Done: univariate analysis, cleaning script, [data dictionary](references/data_dictionary.md) |
-| 3. EDA (`notebooks/2_bi_multivariate_analysis.ipynb`) | ✅ Done: feature decisions and 7 business insights (figures saved after modelling) |
-| 4. Feature engineering (`notebooks/3_feature_engg.ipynb`, `churn/features.py`) | ✅ Done: 3 engineered features and the preprocessing `ColumnTransformer` |
-| 5. Modelling · 6. SHAP | ⬜ Not started |
-| 7. Streamlit app · 8. Docker · 9. Cloud Run | ⬜ Not started |
-
-## Data findings so far
-- **Imbalanced target:** 73% stayed, 27% churned, so accuracy is misleading and the project reports Precision, Recall, F1, ROC-AUC and PR-AUC.
-- **Cleaned data:** `uv run python -m churn.dataset` fixes `TotalCharges`, maps `Churn` to 1/0 and `SeniorCitizen` to Yes/No, and saves `data/processed/telco_churn_clean.parquet`. Parquet keeps column dtypes (unlike CSV/Excel). All columns are kept; the model pipeline chooses the features.
-- **`TotalCharges` quirk:** stored as text; 11 rows are blank. All 11 have `tenure == 0` (new customers not yet billed, none churned), so the blanks are filled with **0** rather than a mean/median or dropped.
-- **`tenure`** is U-shaped: many brand-new customers and a spike at 72 months, which is the dataset's cap, not real behaviour.
-- **`TotalCharges`** is right-skewed and roughly equals `tenure × MonthlyCharges` (collinear). Decision: `TotalCharges` is dropped from the model features; `tenure` and `MonthlyCharges` carry nearly all of its information (to be confirmed by CV with and without it).
-- **Demographics:** gender is ~50/50, ~16% are senior citizens, ~52% have a partner, ~30% have dependents.
-
-## EDA findings
-Churn rate by group, against the 26.5% baseline. Associations, not proof of cause. Feature strength measured with Cramér's V (symmetric effect size) and Theil's U (how much knowing the feature reduces uncertainty about churn); p-values only used as a gate, since with 7,043 rows almost everything is "significant".
+## Key findings
+Churn rate by group, against the 26.5% baseline (associations, not proof of cause). Feature strength is measured with Cramér's V and Theil's U rather than p-values, since with 7,043 rows almost everything is "significant".
 
 | Driver | Highest-risk group | Lowest-risk group |
 |---|---|---|
@@ -46,63 +22,84 @@ Churn rate by group, against the 26.5% baseline. Associations, not proof of caus
 | Add-on services (internet customers) | 0 add-ons 54.9% | All 5 add-ons 5.3% |
 | Online security / tech support | Without 42% | With 15% |
 | Senior citizen | Senior 41.7% | Non-senior 23.6% |
-| Paperless billing | Yes 33.6% | No 16.3% (holds within every payment method) |
+| Paperless billing | Yes 33.6% | No 16.3% |
 | Partner / Dependents | No partner 33.0%, no dependents 31.3% | With partner 19.7%, with dependents 15.5% |
 
-**Business insights** (full write-up at the end of the EDA notebook):
+**Business insights:**
 1. **Contract** is the biggest driver: month-to-month customers churn 15× more than two-year customers. Moving them to a one-year contract is the main lever.
 2. **The first six months** are the danger zone (52.9% churn); 55% of churners leave in their first year, so onboarding matters most.
 3. **Fibre** customers churn at 41.9% vs 19.0% for DSL, at every tenure: a price-for-value or service-quality question.
 4. **Electronic-check** payers churn at 45.3%, even within month-to-month contracts; nudging them to autopay is cheap.
 5. **Each add-on service** lowers churn: 55% with none, 5% with all five; security and tech support matter most.
-6. **One segment** (month-to-month + fibre + electronic check) is 18.6% of customers but **42% of all churners** (60.4% churn rate): the first target list.
+6. **One segment** (month-to-month + fibre + electronic check) is 18.6% of customers but **42% of all churners**: the first target list.
 7. **Seniors and single customers** churn more, largely because of their contract and payment choices.
 
-**Feature decisions** (reasons kept in `churn/config.py → DROP_COLS`; each to be confirmed with cross-validation in the baseline phase):
-- Dropped `TotalCharges`: ≈ `tenure × MonthlyCharges`, so it is collinear with them.
-- Dropped `gender`: no relationship with churn (Cramér's V = 0.000, p = 0.47).
-- Dropped `PhoneService`: fully contained in `MultipleLines` (its "No phone service" level).
-- Dropped `StreamingMovies`: adds no churn signal beyond `StreamingTV`. Their apparent overlap (V = 0.77) was inflated by the shared "No internet service" level; among internet customers it is 0.43.
-- **"No internet service"** in five add-on columns is identical to `InternetService == "No"`, which would create six identical one-hot columns. It is collapsed to "No" inside the model pipeline (`churn.features.collapse_no_internet`), so the app applies the same step.
+## Approach (CRISP-DM)
+| Stage | What was done | Where | Status |
+|---|---|---|---|
+| Business understanding | Framed as binary classification; a missed churner costs more than an unneeded offer | this README | ✅ |
+| Data cleaning | Fixed `TotalCharges` (11 blanks = new customers → 0), encoded the target, saved typed parquet | [1_data-explore](notebooks/1_data-explore.ipynb), `churn/dataset.py` | ✅ |
+| EDA | Churn drivers, column drop decisions, 7 business insights | [2_bi_multivariate_analysis](notebooks/2_bi_multivariate_analysis.ipynb) | ✅ |
+| Feature engineering | 3 engineered features + per-model preprocessing inside an sklearn Pipeline | [3_feature_engg](notebooks/3_feature_engg.ipynb), `churn/features.py` | ✅ |
+| Modelling | Logistic Regression → KNN/SVM → Decision Tree → Random Forest → XGBoost/LightGBM/CatBoost, 5-fold CV | | ⬜ |
+| Evaluation | Business-driven threshold, one-time test evaluation, SHAP explanations | | ⬜ |
+| Deployment | Drift checks, Streamlit app, Docker, GCP Cloud Run | | ⬜ |
 
-## Feature engineering
-All preprocessing lives in `churn/features.py` and runs **inside the sklearn Pipeline**, so anything that learns from the data (encoders, scalers) is fitted only on training folds (no leakage), and the Streamlit app applies exactly the same steps.
+## Key modelling decisions
+- **Columns left out** (reasons in `churn/config.py`):
+  - `TotalCharges`: ≈ tenure × MonthlyCharges, so collinear.
+  - `gender`: no link to churn (Cramér's V = 0.000).
+  - `PhoneService`: contained in `MultipleLines`.
+  - `StreamingMovies`: adds nothing beyond `StreamingTV`.
+  - `customerID`: an identifier.
+- **Engineered features:**
+  - `tenure_group` (0–6 / 7–12 / 13–24 / 25–48 / 49–72 months) captures the steep first-6-months drop.
+  - `num_services` counts the 5 add-on services.
+  - `has_family` is a candidate, kept only if cross-validation supports it.
+- **"No internet service"** in the add-on columns duplicates `InternetService == "No"`, so it is collapsed to "No" inside the Pipeline.
+- **Tenure is limited to 0–72 months** (the training range); the app enforces it rather than extrapolating.
 
-| Feature | Rule | Why |
-|---|---|---|
-| `tenure_group` | bands 0–6 / 7–12 / 13–24 / 25–48 / 49–72 months (fixed edges) | captures the steep first-6-months kink (52.9% → 35.9% churn) that raw `tenure` misses in Logistic Regression |
-| `num_services` | count of the 5 add-on services | churn falls from 54.9% (internet customers, 0 add-ons) to 5.3% (all 5) |
-| `has_family` | has a partner or dependents | both lower churn; kept as a candidate to test |
+## How class imbalance is handled
+Only 26.5% of customers churn. A model that always predicts "stays" is 73.5% accurate and catches no churners, so accuracy is not used to judge models.
+- **Metrics:** PR-AUC, ROC-AUC, recall, precision and F1.
+- **Class weights** (`class_weight="balanced"`, `scale_pos_weight` for XGBoost) make each churner count more during training.
+- **A tuned decision threshold** instead of the default 0.5, chosen from the business cost of a missed churner vs an unneeded offer.
 
-- **Tenure is limited to 0–72 months**, the dataset's range; the app enforces it rather than extrapolating beyond the training data.
-- **A pitfall in the count:** customers without internet also have 0 add-ons but churn at only 7.4%, which hides the 54.9% of internet customers with none. The `InternetService` column separates the two groups in the model.
-- **Preprocessing per model family** (`build_preprocessor`): Logistic Regression gets standardised numerics and one-hot categoricals with one column per Yes/No feature (`drop="if_binary"`, avoids the dummy-variable trap); tree models get raw numerics and full one-hot columns. Excluded columns (`config.DROP_COLS`) are dropped by the transformer.
-- Which engineered features stay (and count vs the 5 add-on binaries for Logistic Regression) is decided with cross-validation in the baseline phase.
+**Why no SMOTE or undersampling:**
+- The imbalance is moderate, not extreme.
+- SMOTE creates synthetic customers by blending one-hot encoded rows, which produces unrealistic profiles.
+- Resampling done outside the cross-validation folds leaks information.
+- Resampling distorts the predicted probabilities that the cost-based threshold and the app's "% risk" rely on.
+- Class weights plus a threshold usually reach the same recall more simply.
 
-## Results
-_To be filled in after model selection._
+A SMOTE comparison is planned for the second iteration to back this up with evidence.
 
-## Live app
-_To be filled in after deploying to Cloud Run._
+## How data leakage is prevented
+- **Split first:** stratified 80/20 train/test before anything learns from the data.
+- **Everything that learns sits inside the sklearn Pipeline** (scaling, encoding, engineered features), so it is fitted on training folds only, and the app applies exactly the same steps.
+- **The threshold is chosen on out-of-fold training predictions**, never on the test set.
+- **The test set is used once**, at the end.
+- **Checks:** a review of which features are known before churn, a scan for any single feature that predicts too well, train-vs-CV and CV-vs-test gaps.
 
-## Project organization
-```
-├── data/{raw,interim,processed,external}   <- git-ignored; raw CSV goes in data/raw/
-├── models/          <- trained pipeline + metadata
-├── notebooks/       <- 1_data-explore.ipynb (cleaning + univariate), 2_bi_multivariate_analysis.ipynb (EDA), 3_feature_engg.ipynb (feature engineering); later N.0-jg-<topic>.ipynb
-├── references/      <- data dictionary and other reference material
-├── reports/figures/ <- generated plots
-├── churn/           <- source package (config, dataset, features, evaluate, plots, modeling/)
-├── app/             <- Streamlit app
-├── tests/
-└── docs/
-```
+## Monitoring
+_To be added: input checks (ranges, unseen categories), PSI-based data and prediction drift against a training reference profile, and retrain triggers._
 
 ## How to run
 ```bash
-uv sync                      # Python 3.12 env + editable install of the churn package
+uv sync                          # Python 3.12 env + editable install of the churn package
 uv run python -m churn.dataset   # raw CSV -> data/processed/telco_churn_clean.parquet
-uv run jupyter lab           # open the notebooks
+uv run jupyter lab               # open the notebooks
 ```
 The raw CSV is not committed: download it from Kaggle into `data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv`.
-_More commands to be added as the pipeline is built._
+
+## Project structure
+```
+├── data/{raw,interim,processed,external}   <- git-ignored; raw CSV goes in data/raw/
+├── models/          <- trained pipeline + metadata
+├── notebooks/       <- 1_data-explore, 2_bi_multivariate_analysis, 3_feature_engg, ...
+├── references/      <- data dictionary
+├── reports/figures/ <- generated plots
+├── churn/           <- source package (config, dataset, features, stats, evaluate, plots, modeling/)
+├── app/             <- Streamlit app
+└── tests/
+```
