@@ -114,3 +114,31 @@ Logistic Regression, 5-fold stratified out-of-fold predictions (one-hot + scaled
 - **Models:** `class_weight="balanced"` (LR, DT) and `scale_pos_weight ≈ 2.77` (XGB), compared with and without.
 - **Threshold:** chosen from out-of-fold predictions on train (max F2, or recall ≥ 0.75 with the best precision), because missing a churner costs more than an unneeded retention offer.
 - **Test set:** never resampled or re-weighted. If SMOTE were ever used, it would go inside an `imblearn` Pipeline so it runs on training folds only.
+
+
+## Q4. Why use Pipeline?
+
+In scikit-learn, a `Pipeline` is a tool used to chain multiple sequential data processing steps and a final model into a single, cohesive estimator. It automates the machine learning workflow by ensuring that data transformers (like scaling or imputation) and a final predictor (like a classifier or regressor) execute in the correct order. `Scikit-learn +2`
+
+### Why Use a Pipeline?
+
+* **Prevents Data Leakage:** It isolates training and testing data transformations, guaranteeing that information from your test set never accidentally influences the training process. `Scikit-learn +1`
+
+
+* **Simplifies Code:** Instead of calling `.fit()` and `.transform()` manually on multiple preprocessors, you call them once on the pipeline object. `YouTube · Krish Naik`
+
+
+* **Enables Joint Hyperparameter Tuning:** You can optimize hyperparameters for both your preprocessing steps (e.g., number of features to select) and your model simultaneously using tools like `GridSearchCV`. `Scikit-learn`, etc
+
+### Core Structure & Rules
+
+A pipeline consists of a list of key-value pairs (tuples) representing individual steps: `Scikit-learn +1`
+
+1. **Intermediate Steps:** Must be **transformers**. They must implement both `fit()` and `transform()` methods (e.g., `StandardScaler`, `SimpleImputer`, `OneHotEncoder`). `Scikit-learn +1`
+
+
+2. **Final Step:** Must be an **estimator** (a model). It only needs to implement the `fit()` method (e.g., `LogisticRegression`, `RandomForestClassifier`). `Scikit-learn +1`
+
+
+## Q5, Why StandardScaler used instead of MinMaxScalar()?
+
