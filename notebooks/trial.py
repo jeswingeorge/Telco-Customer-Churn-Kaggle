@@ -1,10 +1,3 @@
-"""Metrics (precision, recall, F1, ROC-AUC, PR-AUC), threshold selection, and curves."""
-
-import pandas as pd
-from sklearn.model_selection import StratifiedKFold, cross_validate
-
-from churn import config
-
 def run_cv(pipe, name):
     """Run 5-fold CV on a pipeline; return one summary row for the comparison table."""
     # Define metrics relevant for imbalanced data
@@ -12,7 +5,7 @@ def run_cv(pipe, name):
     
     ## Run cross-validation
     skf = StratifiedKFold(n_splits=config.N_SPLITS, shuffle=True, random_state=config.RANDOM_SEED)
-    cv = pd.DataFrame(cross_validate(pipe, X, y, cv=skf, scoring=scoring_metrics, n_jobs=-1, return_train_score=True))
+    cv = pd.DataFrame(cross_validate(pipe, X_train, y_train, cv=skf, scoring=scoring_metrics, n_jobs=-1, return_train_score=True))
 
     ### build the summary as a dictionary for model
     row = {

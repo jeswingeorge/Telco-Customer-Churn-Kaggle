@@ -52,3 +52,15 @@ ENGINEERED_FEATURES = ["tenure_group", "num_services", "has_family"]
 NUM_COLS = ["tenure", "MonthlyCharges", "num_services"]
 CAT_COLS = ['SeniorCitizen', 'Partner', 'Dependents', 'MultipleLines', 'InternetService', 'OnlineSecurity', 'OnlineBackup', 'DeviceProtection', 'TechSupport', 'StreamingTV', 'Contract', 'PaperlessBilling', 'PaymentMethod', 'tenure_group', 'has_family']
 
+
+### Modelding constants (used by churn.models.build_pipeline)
+# The model step in the pipeline is a placeholder; the actual model is set in notebooks/4_baseline_models.ipynb and notebooks/5_advanced_models.ipynb.
+N_SPLITS = 5
+SCORING_METRICS = {
+        "f1": "f1",
+        "precision": "precision",
+        "recall": "recall",
+        "roc_auc": "roc_auc",
+        "pr_auc": "average_precision"
+    }
+
