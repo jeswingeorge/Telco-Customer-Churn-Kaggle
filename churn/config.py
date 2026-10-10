@@ -26,7 +26,7 @@ ID_COL = "customerID"
 # Kept in the cleaned data; the pipeline simply never selects them, and the Streamlit app doesn't ask for them.
 DROP_COLS = {
     "customerID": "Identifier, unique per row; no predictive value.",
-    "TotalCharges": "~ tenure x MonthlyCharges; collinear with them (to confirm with CV in the baseline phase).",
+    "TotalCharges": "~ tenure x MonthlyCharges; collinear with them; confirmed with CV 2026-10-10: adding it lowered LR ROC-AUC.",
     "gender": "No link to churn: Cramer's V = 0.000, p = 0.47, both genders on the 26.5% baseline.",
     "PhoneService": "Fully contained in MultipleLines ('No phone service' level); U(PhoneService | MultipleLines) = 1.0.",
     "StreamingMovies": "Adds no churn signal beyond StreamingTV (U(Churn) 0.0011 -> 0.0017 among internet customers).",
@@ -49,8 +49,12 @@ ENGINEERED_FEATURES = ["tenure_group", "num_services", "has_family"]
 
 # ---- Model feature lists (used by churn.features.build_preprocessor) ----
 # Everything not listed here (DROP_COLS, the target) is dropped by remainder="drop".
-NUM_COLS = ["tenure", "MonthlyCharges", "num_services"]
-CAT_COLS = ['SeniorCitizen', 'Partner', 'Dependents', 'MultipleLines', 'InternetService', 'OnlineSecurity', 'OnlineBackup', 'DeviceProtection', 'TechSupport', 'StreamingTV', 'Contract', 'PaperlessBilling', 'PaymentMethod', 'tenure_group', 'has_family']
+# Feature decisions (phase 5, CV 2026-10-10): has_family, tenure_group, num_services left out; see 05_modelling.md.
+NUM_COLS = ["tenure", "MonthlyCharges"]
+CAT_COLS = ['SeniorCitizen', 'Partner', 'Dependents', 'MultipleLines', 'InternetService',
+            'OnlineSecurity', 'OnlineBackup', 'DeviceProtection', 'TechSupport', 'StreamingTV',
+            'Contract', 'PaperlessBilling', 'PaymentMethod']
+
 
 
 ### Modelling constants 

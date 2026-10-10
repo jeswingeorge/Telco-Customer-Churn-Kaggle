@@ -5,6 +5,7 @@ from sklearn.model_selection import StratifiedKFold, cross_validate
 
 from churn import config
 
+
 def run_cv(pipe, name, X, y):
     """Run 5-fold CV on a pipeline; return one summary row for the comparison table."""
     # Define metrics relevant for imbalanced data

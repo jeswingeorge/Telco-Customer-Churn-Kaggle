@@ -21,14 +21,16 @@ Compare models from simple to complex with 5-fold cross-validation on the traini
 ## Steps (the model ladder: simple → complex)
 Format: **what's new / why** · preprocessor · what to record.
 
-- [ ] **1. Setup.**
+- [x] **1. Setup.** 2026-10-10: the `build_pipeline` helper is in the notebook. `run_cv(pipe, name, X, y)` is in `churn/evaluate.py` and reads its folds, seed and metrics from config. ruff passes.
   - Load the parquet. `X` = all columns except `Churn`; `y` = `Churn`.
   - Stratified 80/20 split; `skf = StratifiedKFold(5, shuffle=True, random_state=RANDOM_STATE)`.
   - Write a small helper `make_pipeline(model, model_type, num_cols=None, cat_cols=None)` that returns `Pipeline([("collapse", FunctionTransformer(collapse_no_internet)), ("features", FunctionTransformer(add_features)), ("prep", build_preprocessor(...)), ("model", model)])`.
   - Write a helper that runs `cross_validate(pipe, X_train, y_train, cv=skf, scoring=["roc_auc", "average_precision", "precision", "recall", "f1"], return_train_score=True)` and returns one row of means ± std.
   - Why a Pipeline: the scaler and encoder are refitted inside every fold, so no validation data leaks into training.
 - [x] **Leakage checks L1, L2, L3, L5** (see below) before the first model. 2026-10-10: all passed.
-- [ ] **2. Logistic Regression** · `"lr"` · the interpretable reference model.
+- [x] **2. Logistic Regression** · `"lr"` · the interpretable reference model.
+  - 2026-10-10 ✅ The final LR (default weights, reduced feature set) has CV ROC-AUC 0.8448 and train−CV gap ≈ 0.005. Feature and weighting decisions are in the table below.
+  - Odds ratios agree with the EDA: two-year vs month-to-month contract 0.26, one-year vs month-to-month 0.50, fiber vs no internet 2.06, electronic check vs credit card 1.53, tenure 0.45 per SD, MonthlyCharges 1.88 per SD; OnlineSecurity and TechSupport are protective. Caveat: MonthlyCharges is largely set by the services, so single service coefficients are read with caution.
   - Default settings, then `class_weight="balanced"`.
   - **Feature-set CV comparisons happen here** (the 4 questions from phase 4): with/without `TotalCharges`, `has_family`, `tenure_group`; `num_services` vs the 5 add-on binaries. Record one row per variant, then decide and record the decisions below.
   - Read the coefficients as odds ratios (`np.exp(coef)`): "a two-year contract multiplies the odds of churn by X". Check that they agree with the EDA.
@@ -77,11 +79,13 @@ Format: **Action.** How · Record · Pass if · Why.
 ## Decisions (fill in as you go)
 | Date | Decision | Why (CV evidence) |
 |---|---|---|
-| | `TotalCharges`: in / out | |
-| | `has_family`: in / out | |
-| | `tenure_group`: in / out | |
-| | LR: `num_services` or the 5 binaries | |
-| | Class weighting: on / off per model | |
+| 2026-10-10 | `TotalCharges`: **out** | ≈ tenure × MonthlyCharges; adding it to LR slightly lowered CV ROC-AUC (collinearity, no new signal). |
+| 2026-10-10 | `has_family`: **out** | Only Partner OR Dependents, both already in; removing it left CV ROC-AUC unchanged. |
+| 2026-10-10 | `tenure_group`: **out** | +0.003 ROC-AUC with it, but only 3/5 folds positive (noise); Contract and payment method already capture early-tenure risk. |
+| 2026-10-10 | LR: **the 5 add-on binaries**, drop `num_services` | Base 0.8473 ≈ binaries 0.8474 > count 0.8467 (binaries ahead in 4/5 folds); the binaries show *which* add-on lowers churn (actionable). Trees may retest the count. |
+| 2026-10-10 | Combined check: final set vs original baseline | 0.8448 vs 0.8473 (−0.0026, 2/5 folds positive, within fold noise). 4 fewer features at the same performance. |
+| 2026-10-10 | Class weighting, LR: **off** | Balanced gives the same ranking (ROC-AUC 0.8474 vs 0.8472, PR-AUC 0.664 vs 0.662) and only moves the 0.5 cut-off (recall 0.54→0.80, precision 0.67→0.52). That equals a lower threshold, and default probabilities stay honest for the phase 6 cost-based threshold. |
+| | Class weighting: on / off for the other models (step 8) | |
 | | Finalist(s) | |
 
 ## Done when

@@ -9,7 +9,7 @@ Telco customer churn prediction: a portfolio project for data science interviews
 - Every planned step must either change a decision or be clearly explainable in an interview. No ritual steps.
 
 ## Current phase
-**Phase 5, Modelling** → [.claude/specs/05_modelling.md](.claude/specs/05_modelling.md) (notebook `notebooks/4_baseline_models.ipynb`, not created yet). Phases 0–4 are done.
+**Phase 5, Modelling** → [.claude/specs/05_modelling.md](.claude/specs/05_modelling.md) (notebook `notebooks/4_baseline_models.ipynb`). Phases 0–4 are done. In phase 5, setup, leakage checks L1/L2/L3/L5 and step 2 (LR + feature decisions) are done; next is step 3 (KNN/SVM). The CV helper is `churn.evaluate.run_cv(pipe, name, X, y)`, and CV settings live in config (`N_SPLITS`, `SCORING_METRICS`).
 
 ## Working with the user
 - This is interview prep: the user must be able to explain every choice. When writing code or notebooks, state *why* (e.g. why PR-AUC, why fit inside a Pipeline) in markdown cells, in comments, or in your reply.
