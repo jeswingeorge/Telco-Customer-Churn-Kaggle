@@ -4,6 +4,20 @@ Predict which telecom customers are likely to leave, so a retention team can tar
 
 Dataset: [Kaggle – Telco Customer Churn](https://www.kaggle.com/datasets/blastchar/telco-customer-churn) (IBM sample data): 7,043 customers, 21 columns, **26.5% churn**. Column details are in the [data dictionary](references/data_dictionary.md).
 
+## `Churn/` Folder
+
+```
+config.py            → paths, constants, column lists
+dataset.py           → raw CSV → clean parquet
+features.py          → Pipeline steps (collapse, add_features, preprocessor)
+evaluate.py          → metrics, threshold sweep
+monitoring.py        → drift
+modeling/train.py    → fit the FINAL model and save it to models/
+modeling/predict.py  → load the saved model, score new customers
+
+```
+
+
 ## Live app
 _To be added after deploying to Cloud Run._
 

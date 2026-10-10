@@ -5,13 +5,13 @@ from sklearn.model_selection import StratifiedKFold, cross_validate
 
 from churn import config
 
-def run_cv(pipe, name):
+def run_cv(pipe, name, X, y):
     """Run 5-fold CV on a pipeline; return one summary row for the comparison table."""
     # Define metrics relevant for imbalanced data
     scoring_metrics = config.SCORING_METRICS
     
     ## Run cross-validation
-    skf = StratifiedKFold(n_splits=config.N_SPLITS, shuffle=True, random_state=config.RANDOM_SEED)
+    skf = StratifiedKFold(n_splits=config.N_SPLITS, shuffle=True, random_state=config.RANDOM_STATE)
     cv = pd.DataFrame(cross_validate(pipe, X, y, cv=skf, scoring=scoring_metrics, n_jobs=-1, return_train_score=True))
 
     ### build the summary as a dictionary for model
