@@ -1,9 +1,10 @@
-"""Engineered features and the preprocessing ColumnTransformer."""
+"""Engineered features, the preprocessing ColumnTransformer and the full model Pipeline."""
 
 import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, StandardScaler
 
 from churn.config import (
     ADDON_COLS,
@@ -114,3 +115,18 @@ def build_preprocessor(model_type: str, num_cols=None, cat_cols=None) -> ColumnT
     
     preprocessor.set_output(transform="pandas")
     return preprocessor
+
+
+def build_pipeline(model, model_type: str, num_cols=None, cat_cols=None) -> Pipeline:
+    """Raw rows in → churn prediction out. model_type: "lr" or "tree" (picks the preprocessor).
+
+    Why one Pipeline: every step that learns (scaler, encoder, model) is refitted inside each
+    CV fold, so no validation data leaks into training. The saved model, the notebooks and the
+    Streamlit app all run the same steps.
+    """
+    return Pipeline([
+        ("collapse", FunctionTransformer(collapse_no_internet)),
+        ("features", FunctionTransformer(add_features)),
+        ("prep", build_preprocessor(model_type, num_cols, cat_cols)),
+        ("model", model),
+    ])

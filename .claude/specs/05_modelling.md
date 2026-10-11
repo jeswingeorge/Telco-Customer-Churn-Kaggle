@@ -1,6 +1,6 @@
 # Phase 5: Modelling
 
-**CRISP-DM:** Modeling · **Status:** 🔄 Next · **Where:** `notebooks/4_baseline_models.ipynb`, then `churn/modeling/train.py`
+**CRISP-DM:** Modeling · **Status:** 🔄 Next · **Where:** `notebooks/4_baseline_models.ipynb` (setup, leakage checks, LR + feature decisions), `notebooks/5_advanced_models.ipynb` (steps 3–10: KNN/SVM onward, tuning, comparison), then `churn/modeling/train.py`
 
 ## Goal
 Compare models from simple to complex with 5-fold cross-validation on the training set, settle the open feature questions from phase 4, and pick 1–2 finalists for phase 6. This happens **without touching the test set**.
@@ -21,7 +21,8 @@ Compare models from simple to complex with 5-fold cross-validation on the traini
 ## Steps (the model ladder: simple → complex)
 Format: **what's new / why** · preprocessor · what to record.
 
-- [x] **1. Setup.** 2026-10-10: the `build_pipeline` helper is in the notebook. `run_cv(pipe, name, X, y)` is in `churn/evaluate.py` and reads its folds, seed and metrics from config. ruff passes.
+- [x] **1. Setup.** 2026-10-10: `run_cv(pipe, name, X, y)` is in `churn/evaluate.py` and reads its folds, seed and metrics from config. ruff passes.
+  - 2026-10-11: `build_pipeline(model, model_type, num_cols=None, cat_cols=None)` moved from notebook 4 to `churn/features.py`, so both notebooks (and later `train.py`) share one definition. Notebook 5 repeats the same split (`config.RANDOM_STATE`) and reproduces the final LR (CV ROC-AUC 0.844776) as row 1 of the comparison table.
   - Load the parquet. `X` = all columns except `Churn`; `y` = `Churn`.
   - Stratified 80/20 split; `skf = StratifiedKFold(5, shuffle=True, random_state=RANDOM_STATE)`.
   - Write a small helper `make_pipeline(model, model_type, num_cols=None, cat_cols=None)` that returns `Pipeline([("collapse", FunctionTransformer(collapse_no_internet)), ("features", FunctionTransformer(add_features)), ("prep", build_preprocessor(...)), ("model", model)])`.
@@ -74,7 +75,7 @@ Format: **Action.** How · Record · Pass if · Why.
 - [x] **L5. Single-feature AUC scan.** How: for each raw model feature, the CV ROC-AUC of a tiny Pipeline (one-hot or scaler + LR) on that one column. Record: a table sorted by AUC. Pass if: no single feature has AUC > 0.90 (otherwise investigate it as target leakage). Why: one feature that predicts almost perfectly is the classic leakage sign. Bonus: the ranking should match the EDA (Contract, tenure at the top).
   - 2026-10-10 ✅ Max is Contract 0.739 (< 0.90), then tenure 0.735 and tenure_group 0.721, which matches the EDA. The lowest is MultipleLines at 0.525. num_services is weak alone (0.56) because 0 mixes no-internet customers with internet customers who have no add-ons; it is not a feature-selection verdict.
 - [ ] **L6. Train vs CV gap.** How: `return_train_score=True`. Record: a train−CV ROC-AUC column in the comparison table. Pass if: gap < ~0.05 after tuning (the default Decision Tree will fail this on purpose). Why: separates overfitting from real skill.
-- [ ] **L7. Tuning inside CV only.** How: search objects get the Pipeline and `X_train`. Pass if: `X_test` is not used anywhere in notebook 4. Why: tuning on the test set makes the final test score optimistic.
+- [ ] **L7. Tuning inside CV only.** How: search objects get the Pipeline and `X_train`. Pass if: `X_test` is not used anywhere in notebooks 4 and 5. Why: tuning on the test set makes the final test score optimistic.
 
 ## Decisions (fill in as you go)
 | Date | Decision | Why (CV evidence) |
