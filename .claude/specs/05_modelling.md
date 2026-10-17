@@ -35,10 +35,13 @@ Format: **what's new / why** · preprocessor · what to record.
   - Default settings, then `class_weight="balanced"`.
   - **Feature-set CV comparisons happen here** (the 4 questions from phase 4): with/without `TotalCharges`, `has_family`, `tenure_group`; `num_services` vs the 5 add-on binaries. Record one row per variant, then decide and record the decisions below.
   - Read the coefficients as odds ratios (`np.exp(coef)`): "a two-year contract multiplies the odds of churn by X". Check that they agree with the EDA.
-- [ ] **3. KNN and SVM** · `"lr"` (they need scaled features).
+- [x] **3. KNN and SVM** · `"lr"` (they need scaled features).
+  - 2026-10-17 ✅ Default rows (CV ROC-AUC / PR-AUC / gap / fit s): KNN k=5 0.779 / 0.522 / 0.121 / 0.1; SVM RBF 0.796 / 0.636 / 0.070 / ~3. Both below LR and both fail L6; comparison points only, tuned in step 9. Why: distance treats every one-hot column equally (LR learns one weight per column); KNN's self-vote inflates the train score; SVM is slow (pairwise kernel + `probability=True` internal CV).
   - KNN: "similar customers behave alike". SVM: maximum-margin boundary; needs `probability=True` for `predict_proba` (slower).
   - Expect them to be no better than LR on tabular one-hot data. Being able to say *why* (distance becomes less meaningful across many one-hot columns; no native probabilities) is the interview value.
-- [ ] **4. Decision Tree** · `"tree"`.
+- [x] **4. Decision Tree** · `"tree"`.
+  - 2026-10-17 ✅ Default: CV ROC-AUC 0.655, gap 0.345 (train 1.0; pure leaves give 0/1 probabilities, so no ranking). Limited (`max_depth=10, min_samples_leaf=50`): 0.831, PR-AUC 0.636, gap 0.032 (passes L6), 0.09 s; best non-LR so far, still below LR. Leaf ≈ 50 because a leaf churn rate from 50 customers is ±12 pts (95%).
+  - Depth-3 tree (explanation only, no table row): root `Contract_Month-to-month`; top leaf month-to-month + fiber + tenure ≤ 13 months = 71% churn, 13.5% of customers, ~36% of churners. Matches the EDA.
   - Default settings → record the train vs CV gap (it overfits: train AUC ≈ 1.0).
   - Then limit `max_depth` / `min_samples_leaf`. Plot a shallow tree (`plot_tree`): readable rules for the business.
 - [ ] **5. Random Forest** · `"tree"`.

@@ -9,7 +9,7 @@ Telco customer churn prediction: a portfolio project for data science interviews
 - Every planned step must either change a decision or be clearly explainable in an interview. No ritual steps.
 
 ## Current phase
-**Phase 5, Modelling** → [.claude/specs/05_modelling.md](.claude/specs/05_modelling.md) Phases 0–4 are done. In phase 5, setup, leakage checks L1/L2/L3/L5 and step 2 (LR + feature decisions) are done in `notebooks/4_baseline_models.ipynb`; steps 3–10 (KNN/SVM onward, tuning, comparison table) continue in `notebooks/5_advanced_models.ipynb`, starting from the same split and the final LR row (CV ROC-AUC 0.8448). Next is step 3 (KNN/SVM). Shared helpers: `churn.features.build_pipeline(model, model_type, num_cols=None, cat_cols=None)` and `churn.evaluate.run_cv(pipe, name, X, y)`; CV settings live in config (`N_SPLITS`, `SCORING_METRICS`).
+**Phase 5, Modelling** → [.claude/specs/05_modelling.md](.claude/specs/05_modelling.md) Phases 0–4 are done. In phase 5, setup, leakage checks L1/L2/L3/L5 and step 2 (LR + feature decisions) are done in `notebooks/4_baseline_models.ipynb`; steps 3–10 (KNN/SVM onward, tuning, comparison table) continue in `notebooks/5_advanced_models.ipynb`, starting from the same split and the final LR row (CV ROC-AUC 0.8448). Steps 3–4 (KNN, SVM, Decision Tree) are done; results are in the spec. Next is step 5 (Random Forest). Shared helpers: `churn.features.build_pipeline(model, model_type, num_cols=None, cat_cols=None)` and `churn.evaluate.run_cv(pipe, name, X, y)`; CV settings live in config (`N_SPLITS`, `SCORING_METRICS`).
 
 ## Working with the user
 - This is interview prep: the user must be able to explain every choice. When writing code or notebooks, state *why* (e.g. why PR-AUC, why fit inside a Pipeline) in markdown cells, in comments, or in your reply.
@@ -49,3 +49,4 @@ Telco customer churn prediction: a portfolio project for data science interviews
 - Windows Application Control blocks executables run from uv's cache, so `uvx <tool>` fails. Install tools with `uv add --dev` and use `uv run`.
 - Before editing a notebook from outside VS Code, make sure the user has it closed (or tell them to use *File → Revert File* afterwards). An open notebook saved from the editor overwrites cells added on disk.
 - Docker Desktop and gcloud are not installed yet (needed for phases 9–10).
+- The notebooks hold long teaching notes ("predictions vs result" markdown cells). They are for the user, not for context: take results and decisions from the specs, and don't read a whole notebook. Use Grep (e.g. for a cell's heading or the last `model_compare_df` output) to find only the cells you need.
