@@ -46,6 +46,11 @@ Format: **what's new / why** · preprocessor · what to record.
   - Then limit `max_depth` / `min_samples_leaf`. Plot a shallow tree (`plot_tree`): readable rules for the business.
 - [ ] **5. Random Forest** · `"tree"`.
   - Bagging: many de-correlated trees averaged → lower variance than one tree. `class_weight="balanced"`.
+  - 2026-10-17 Default row (CV ROC-AUC / PR-AUC / gap / fit s): 0.807 / 0.588 / 0.193 / 0.43. Train AUC = 1.0 by construction (pure leaves; each row is in ~63% of the bootstraps), so read CV/OOB, not the gap. Averaging lifts the full tree 0.655 → 0.807 (vote shares rank; uncorrelated errors cancel), but it is still below the limited tree (0.831) and LR, and it fails L6. `class_weight` waits for step 8.
+  - [ ] **5b. Understanding exploration** (one parameter at a time vs the default; separate `results_rf` list, so `model_compare_df` keeps one RF row). It is for understanding, not selection; the final values come from step 9.
+    - `min_samples_leaf` (e.g. 20): less noisy votes → expect higher CV and a smaller gap.
+    - `max_features=None` (pure bagging): every split sees all columns → correlated trees → expect lower CV than `"sqrt"` (the ρσ² term).
+    - `n_estimators` (e.g. 20 vs 500): more trees can't overfit; the score plateaus while fit time grows linearly.
 - [ ] **6. XGBoost** · `"tree"`.
   - Boosting: trees built one after another, each fixing the previous errors. `scale_pos_weight = neg/pos` (≈ 2.77).
 - [ ] **7. LightGBM and CatBoost** · `"tree"`.
